@@ -1,8 +1,16 @@
 import { getDb } from "../db.js";
 import { UpdateSchema } from "../types.js";
+import type { Entry } from "../types.js";
+import {
+  generateEmbedding,
+  buildEmbeddingText,
+  storeEmbedding,
+} from "../embeddings.js";
 import type { z } from "zod";
 
-export function updateKnowledge(args: z.infer<typeof UpdateSchema>): string {
+export async function updateKnowledge(
+  args: z.infer<typeof UpdateSchema>
+): Promise<string> {
   const db = getDb();
   const { id, title, content, tags, category, project } = args;
 
@@ -40,6 +48,22 @@ export function updateKnowledge(args: z.infer<typeof UpdateSchema>): string {
 
   if (result.changes === 0) {
     return `Entry [${id}] not found.`;
+  }
+
+  if (title !== undefined || content !== undefined) {
+    try {
+      const row = db
+        .prepare(`SELECT title, content FROM entries WHERE id = @id`)
+        .get({ id }) as Pick<Entry, "title" | "content"> | undefined;
+      if (row) {
+        const embedding = await generateEmbedding(
+          buildEmbeddingText(row.title, row.content)
+        );
+        storeEmbedding(id, embedding);
+      }
+    } catch {
+      // Embedding regeneration failed — update still succeeded
+    }
   }
 
   return `Updated entry [${id}].`;

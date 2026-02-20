@@ -1,8 +1,15 @@
 import { getDb } from "../db.js";
 import { AddSchema } from "../types.js";
+import {
+  generateEmbedding,
+  buildEmbeddingText,
+  storeEmbedding,
+} from "../embeddings.js";
 import type { z } from "zod";
 
-export function addKnowledge(args: z.infer<typeof AddSchema>): string {
+export async function addKnowledge(
+  args: z.infer<typeof AddSchema>
+): Promise<string> {
   const db = getDb();
   const { title, content, tags, category, project } = args;
 
@@ -24,5 +31,14 @@ export function addKnowledge(args: z.infer<typeof AddSchema>): string {
       project: project ?? null,
     });
 
-  return `Added entry [${result.lastInsertRowid}]: ${title}`;
+  const entryId = result.lastInsertRowid as number;
+
+  try {
+    const embedding = await generateEmbedding(buildEmbeddingText(title, content));
+    storeEmbedding(entryId, embedding);
+  } catch {
+    // Embedding generation failed — entry is still saved
+  }
+
+  return `Added entry [${entryId}]: ${title}`;
 }

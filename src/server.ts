@@ -20,7 +20,7 @@ export function registerTools(server: McpServer): void {
         parsed.project = getDetectedProject() ?? undefined;
       }
       return {
-        content: [{ type: "text", text: searchKnowledge(parsed) }],
+        content: [{ type: "text", text: await searchKnowledge(parsed) }],
       };
     }
   );
@@ -35,7 +35,7 @@ export function registerTools(server: McpServer): void {
         parsed.project = getDetectedProject() ?? undefined;
       }
       return {
-        content: [{ type: "text", text: addKnowledge(parsed) }],
+        content: [{ type: "text", text: await addKnowledge(parsed) }],
       };
     }
   );
@@ -45,7 +45,7 @@ export function registerTools(server: McpServer): void {
     "Update an existing knowledge entry by ID.",
     UpdateSchema.shape,
     async (args) => ({
-      content: [{ type: "text", text: updateKnowledge(UpdateSchema.parse(args)) }],
+      content: [{ type: "text", text: await updateKnowledge(UpdateSchema.parse(args)) }],
     })
   );
 
@@ -90,4 +90,5 @@ export function registerTools(server: McpServer): void {
       };
     }
   );
+
 }

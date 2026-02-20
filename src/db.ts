@@ -56,5 +56,13 @@ export function initDb(): void {
       INSERT INTO entries_fts(rowid, title, content, tags, category)
       VALUES (new.id, new.title, new.content, new.tags, new.category);
     END;
+
+    CREATE TABLE IF NOT EXISTS embeddings (
+      entry_id INTEGER PRIMARY KEY,
+      embedding BLOB NOT NULL,
+      model TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (entry_id) REFERENCES entries(id) ON DELETE CASCADE
+    );
   `);
 }
