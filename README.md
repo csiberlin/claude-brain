@@ -1,6 +1,6 @@
 # Claude Brain
 
-A persistent knowledge base for [Claude Code](https://claude.ai/code), implemented as an MCP server with local SQLite + FTS5 full-text search.
+A persistent knowledge base for [Claude Code](https://claude.ai/code), implemented as an MCP server with local SQLite + FTS5 full-text search and semantic vector search.
 
 Claude automatically stores insights while working and consolidates them before ending a session — building up a searchable brain across projects and conversations.
 
@@ -22,7 +22,7 @@ That's it. Claude will now proactively store knowledge while working and clean i
 
 ## How It Works
 
-**During work**, Claude calls `brain_add` whenever it discovers a pattern, solves a tricky bug, learns an API quirk, or makes an architectural decision. Before starting work, it checks for relevant existing knowledge with `brain_search`.
+**During work**, Claude calls `brain_add` whenever it discovers a pattern, solves a tricky bug, learns an API quirk, or makes an architectural decision. Each entry gets a vector embedding generated automatically. Before starting work, it checks for relevant existing knowledge with `brain_search`, which combines FTS5 keyword matching with semantic vector similarity via Reciprocal Rank Fusion (RRF) — so searches find results even when different words are used.
 
 **Before session ends**, Claude reviews all stored knowledge via `brain_consolidate` — removing contradictions, merging redundancies, and deleting outdated entries. Trigger this explicitly with `/goodbye` or `/exit`.
 
@@ -34,7 +34,7 @@ All tools are prefixed with `brain_` for easy identification:
 
 | Tool | Description |
 |------|-------------|
-| `brain_search` | Full-text search across knowledge entries. Auto-scoped to current project. |
+| `brain_search` | Hybrid FTS5 + semantic vector search across knowledge entries. Auto-scoped to current project. |
 | `brain_add` | Store a new insight, pattern, or solution. Auto-tagged with current project. |
 | `brain_update` | Update an existing entry by ID. |
 | `brain_delete` | Delete an entry by ID. |
