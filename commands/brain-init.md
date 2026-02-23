@@ -2,26 +2,47 @@ Initialize the knowledge base for this project. Do the following steps:
 
 ## Step 1: Enable automatic brain usage
 
-1. Read `~/.claude/CLAUDE.md`. If it doesn't exist, create it.
-2. If a "## Knowledge Base" section is NOT already present, append the following section to the end of the file:
+1. Read `~/.claude/knowledge-base.md`. If it doesn't exist, create it with the following content:
 
 ```
 ## Knowledge Base
 
-You have access to a persistent knowledge base via MCP tools. Use it proactively:
+You have access to a persistent knowledge base via MCP tools (`brain_add`, `brain_search`, `brain_update`, `brain_delete`, `brain_consolidate`). Use it proactively — **not when asked, but automatically**.
 
-**During work:** When you discover a pattern, solve a tricky bug, learn an API quirk, or make an architectural decision — call `brain_add` to store it. Don't wait to be asked. Before starting work, call `brain_search` to check for relevant existing knowledge.
+### Before Starting Work
+- Call `brain_search` with keywords relevant to the task (project name, technology, problem domain)
+- Check for existing patterns, past bugs, or architectural decisions that apply
 
-**Before session ends:** When the user says goodbye, ends the conversation, or you sense the session is wrapping up — call `brain_consolidate` to review your knowledge entries. Clean up contradictions, merge redundancies, delete outdated entries using `brain_update` and `brain_delete`. You can also use `/goodbye` or `/exit` to trigger this.
+### During Work — Mandatory Storage Triggers
+After ANY of the following events, call `brain_add` immediately:
 
-**What to look for during consolidation:**
-- Entries that contradict each other — keep the correct/newer one
-- Redundant entries covering the same topic — merge into the better one
-- Outdated information that no longer applies — delete it
-- Entries that could be improved with recent learnings — update them
+1. **You resolve a build/compile error** — store the error cause and fix (category: `debugging`)
+2. **You discover an API quirk or gotcha** — e.g., namespace collisions, unexpected property names, missing methods (category: `api`)
+3. **You establish a pattern used across multiple files** — e.g., how messages are plumbed, how columns flow through ViewModels (category: `pattern`)
+4. **You make or encounter an architectural decision** — e.g., which ViewModel owns which data, how DI is structured (category: `architecture`)
+5. **You learn a configuration detail** — e.g., solution file location, build commands, project structure (category: `config`)
+6. **You work around a framework limitation** — e.g., using `using` aliases for type conflicts, using `EditSettings` instead of direct property (category: `debugging`)
 
-Categories: pattern, debugging, api, config, architecture, general
+**Rule of thumb:** If you had to figure something out (it wasn't obvious from the code alone), store it. Future sessions start fresh — anything not stored is lost.
+
+### What Makes a Good Entry
+- **Title:** Short, searchable (e.g., "DevExpress WPF: ColumnDefinition name collision with Shared namespace")
+- **Content:** Specific and actionable — include the fix, not just the problem. Include file paths when relevant.
+- **Tags:** Technology names, project names, error codes, concepts (e.g., `devexpress`, `wpf`, `gxreport`, `namespace-collision`)
+- **Project:** Set the project identifier when the knowledge is project-specific
+
+### Before Session Ends
+When the user says goodbye, ends the conversation, or you sense the session is wrapping up:
+1. Call `brain_consolidate` to review all entries
+2. Clean up: delete outdated entries, merge redundancies, resolve contradictions
+3. You can also use `/goodbye` or `/exit` to trigger this
+
+Categories: `pattern`, `debugging`, `api`, `config`, `architecture`, `general`
 ```
+
+2. Read `~/.claude/CLAUDE.md`. If it doesn't exist, create it with just `@knowledge-base.md`.
+3. If `~/.claude/CLAUDE.md` exists but does NOT contain `@knowledge-base.md`, append `@knowledge-base.md` to the end.
+4. If `~/.claude/CLAUDE.md` contains an old inline "## Knowledge Base" section, remove it (the reference to `knowledge-base.md` replaces it).
 
 ## Step 2: Migrate project knowledge from CLAUDE.md to brain
 
