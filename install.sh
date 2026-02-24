@@ -52,11 +52,23 @@ After ANY of the following events, call `brain_add` immediately:
 - **Tags:** Technology names, project names, error codes, concepts (e.g., `devexpress`, `wpf`, `gxreport`, `namespace-collision`)
 - **Project:** Set the project identifier when the knowledge is project-specific
 
+### Knowledge Promotion
+Stable brain entries should eventually graduate to CLAUDE.md files where they're loaded every message. An entry qualifies when ALL of these are true:
+- **Category** is `architecture`, `pattern`, or `config`
+- **Age:** created more than 7 days ago
+- **Project-scoped:** has a project tag (not general)
+- **Not already in CLAUDE.md:** the target file doesn't already capture equivalent knowledge
+
+Use `/brain-sync` to review and promote candidates on demand. During `/goodbye` or `/exit`, flag any candidates but do not auto-promote.
+
+When promoting, place entries in the CLAUDE.md closest to the code they describe (e.g., knowledge about `src/services/` goes in `src/services/CLAUDE.md` if one exists). Fall back to the project root CLAUDE.md. Write promoted knowledge as curated documentation under a `## Knowledge` section — do not paste raw brain entries. After promoting, delete the brain entry with `brain_delete`.
+
 ### Before Session Ends
 When the user says goodbye, ends the conversation, or you sense the session is wrapping up:
 1. Call `brain_consolidate` to review all entries
 2. Clean up: delete outdated entries, merge redundancies, resolve contradictions
-3. You can also use `/goodbye` or `/exit` to trigger this
+3. Flag any promotion candidates and mention `/brain-sync` if candidates exist
+4. You can also use `/goodbye` or `/exit` to trigger this
 
 Categories: `pattern`, `debugging`, `api`, `config`, `architecture`, `general`
 KBEOF
