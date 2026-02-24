@@ -15,7 +15,7 @@ npm run build
 
 echo ""
 echo "[3/5] Registering MCP server in Claude Code..."
-claude mcp add --transport stdio --scope user knowledge-base -- node "$SCRIPT_DIR/dist/index.js"
+claude mcp add --transport stdio --scope user knowledge-base -- node "$SCRIPT_DIR/dist/index.js" || echo "MCP server already registered (this is fine)"
 
 echo ""
 echo "[4/5] Installing knowledge base instructions..."
