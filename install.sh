@@ -94,13 +94,14 @@ mkdir -p "$COMMANDS_DIR"
 for cmd in "$SCRIPT_DIR"/commands/*.md; do
   cp "$cmd" "$COMMANDS_DIR/$(basename "$cmd")"
 done
-echo "Slash commands installed: /brain-init, /goodbye, /exit"
+echo "Slash commands installed: /brain-init, /brain-sync, /goodbye, /exit"
 
 echo ""
 echo "=== Done! Restart Claude Code to activate. ==="
 echo ""
 echo "Available commands:"
 echo "  /brain-init  — Enable auto-knowledge and migrate CLAUDE.md to brain"
+echo "  /brain-sync  — Promote stable brain entries to CLAUDE.md"
 echo "  /goodbye     — Consolidate knowledge and end session"
 echo "  /exit        — Same as /goodbye"
 echo ""

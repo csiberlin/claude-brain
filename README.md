@@ -47,6 +47,7 @@ All tools are prefixed with `brain_` for easy identification:
 | Command | Description |
 |---------|-------------|
 | `/brain-init` | Enable auto-knowledge, migrate CLAUDE.md to brain, slim down CLAUDE.md |
+| `/brain-sync` | Promote stable brain entries to CLAUDE.md files |
 | `/goodbye` | Consolidate knowledge and end session |
 | `/exit` | Same as `/goodbye` |
 
