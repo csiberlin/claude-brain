@@ -15,6 +15,13 @@ The two-tier model:
 
 This means a project with 50 knowledge entries pays for only the 3–5 relevant snippets returned by a search, not all 50 on every turn. The `/brain-init` command automates this migration: it moves detailed content from CLAUDE.md into the brain and slims the file to essentials. Search results are further compressed via FTS5 `snippet()` (40-token excerpts) rather than returning full entry content.
 
+### Key Thresholds
+
+- `CLAUDE.md`: <100 lines recommended ("healthy"), >200 lines degrades adherence, 40K chars triggers built-in warning
+- `MEMORY.md`: first 200 lines loaded, remainder silently truncated
+- `@import` files: loaded at startup, not lazy — every imported file costs tokens per message
+- Search results: ~40 tokens per snippet via FTS5 `snippet()`, or 200 chars for vector-only hits
+
 ## Runtime
 
 ```

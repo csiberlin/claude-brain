@@ -30,6 +30,17 @@ That's it. Claude will now proactively store knowledge while working and clean i
 
 **With auto memory**, Claude Code's built-in `MEMORY.md` is loaded every message — keep it under 10 lines of meta-instructions only. Brain remains the primary knowledge store because on-demand search costs zero tokens when not needed.
 
+## Token Budget
+
+Claude Code loads `CLAUDE.md` and `MEMORY.md` into every message. This tool moves bulk knowledge out of those files and into an on-demand store.
+
+Key thresholds:
+- **CLAUDE.md**: target <100 lines. Warning at 40K characters. >200 lines degrades instruction adherence.
+- **MEMORY.md**: first 200 lines loaded, rest **silently truncated** — no warning.
+- **Brain entries**: zero token cost when not queried. Search returns compressed snippets (~40 tokens each).
+
+`/brain-init` automates the migration: it moves detailed content from CLAUDE.md into the brain and slims the file to essentials.
+
 ## Tools
 
 All tools are prefixed with `brain_` for easy identification:
