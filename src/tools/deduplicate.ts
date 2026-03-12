@@ -1,6 +1,19 @@
 import { getDb } from "../db.js";
-import { ConsolidateSchema } from "../types.js";
+import { DeduplicateSchema } from "../types.js";
 import type { z } from "zod";
+
+const TRUST_ORDER: Record<string, number> = {
+  docs: 5,
+  code: 4,
+  verified: 4,
+  research: 3,
+  inferred: 2,
+};
+
+function trustScore(sourceType: string | null): number {
+  if (!sourceType) return 1;
+  return TRUST_ORDER[sourceType] ?? 1;
+}
 
 interface DuplicateGroup {
   title: string;
@@ -18,15 +31,14 @@ interface EntryRow {
   tags: string;
   category: string;
   project: string | null;
+  source_type: string | null;
   updated_at: string;
 }
 
-export function consolidate(args: z.infer<typeof ConsolidateSchema>): string {
+export function deduplicate(args: z.infer<typeof DeduplicateSchema>): string {
   const db = getDb();
   const { apply, min_projects } = args;
 
-  // Find entries with similar titles across multiple projects
-  // Group by normalized title (lowercase, trimmed) and category
   const groups = db
     .prepare(
       `SELECT
@@ -45,11 +57,10 @@ export function consolidate(args: z.infer<typeof ConsolidateSchema>): string {
     .all({ min_projects }) as DuplicateGroup[];
 
   if (groups.length === 0) {
-    return "No consolidation candidates found.";
+    return "No deduplication candidates found.";
   }
 
   if (!apply) {
-    // Dry-run: show candidates
     const lines = groups.map((g) => {
       const ids = g.ids.split(",");
       return (
@@ -59,14 +70,12 @@ export function consolidate(args: z.infer<typeof ConsolidateSchema>): string {
       );
     });
     return (
-      `Consolidation candidates (${groups.length}):\n\n` +
+      `Deduplication candidates (${groups.length}):\n\n` +
       lines.join("\n---\n") +
       `\n\nRun with apply=true to merge these into general knowledge.`
     );
   }
 
-  // Apply: for each group, keep the most recently updated entry,
-  // promote it to general (project=NULL), merge unique tags, delete the rest
   const updateStmt = db.prepare(
     `UPDATE entries SET project = NULL, tags = @tags, updated_at = datetime('now') WHERE id = @id`
   );
@@ -79,21 +88,21 @@ export function consolidate(args: z.infer<typeof ConsolidateSchema>): string {
     for (const group of groups) {
       const ids = group.ids.split(",").map(Number);
 
-      // Fetch all entries in this group
       const entries = db
         .prepare(
-          `SELECT * FROM entries WHERE id IN (${ids.map(() => "?").join(",")})`
+          `SELECT id, title, content, tags, category, project, source_type, updated_at
+           FROM entries WHERE id IN (${ids.map(() => "?").join(",")})`
         )
         .all(...ids) as EntryRow[];
 
-      // Pick the most recently updated entry as the "winner"
-      entries.sort(
-        (a, b) =>
-          new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-      );
+      // Pick winner: highest trust, then most recent as tiebreaker
+      entries.sort((a, b) => {
+        const trustDiff = trustScore(b.source_type) - trustScore(a.source_type);
+        if (trustDiff !== 0) return trustDiff;
+        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      });
       const winner = entries[0];
 
-      // Merge all unique tags
       const allTags = new Set<string>();
       for (const entry of entries) {
         for (const tag of entry.tags.split(",")) {
@@ -102,11 +111,9 @@ export function consolidate(args: z.infer<typeof ConsolidateSchema>): string {
         }
       }
 
-      // Promote winner to general, with merged tags
       updateStmt.run({ id: winner.id, tags: [...allTags].join(",") });
       merged++;
 
-      // Delete the rest
       for (const entry of entries.slice(1)) {
         deleteStmt.run({ id: entry.id });
         deleted++;
@@ -117,8 +124,8 @@ export function consolidate(args: z.infer<typeof ConsolidateSchema>): string {
   transaction();
 
   return (
-    `Consolidated ${groups.length} groups:\n` +
-    `  ${merged} entries promoted to general knowledge\n` +
+    `Deduplicated ${groups.length} groups:\n` +
+    `  ${merged} entries promoted to general knowledge (preferred by trust level)\n` +
     `  ${deleted} duplicate entries removed`
   );
 }
