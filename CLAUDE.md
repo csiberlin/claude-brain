@@ -17,25 +17,17 @@ npm start            # run the MCP server (stdio transport)
 
 No test framework is configured. No linter is configured.
 
-## Architecture
+## Structure
 
-**Entry point**: `src/index.ts` — initializes DB, detects project, registers tools, starts stdio transport.
+- `src/index.ts` — entry point (DB init, project detection, tool registration, stdio transport)
+- `src/db.ts` — SQLite schema and FTS5 triggers
+- `src/server.ts` — MCP tool registration with Zod validation
+- `src/types.ts` — Entry interface, Zod schemas, category enum
+- `src/embeddings.ts` — HuggingFace WASM embedding generation
+- `src/project.ts` — git remote project detection
+- `src/tools/*.ts` — individual tool implementations
 
-**Key flow**: `index.ts` → `db.ts` (SQLite init with FTS5 triggers) → `project.ts` (git remote detection) → `server.ts` (registers 7 MCP tools using Zod schemas from `types.ts`) → `tools/*.ts` (implementations).
-
-**Database**: `entries` table + `entries_fts` virtual table (FTS5, porter tokenizer) + `embeddings` table (384-dim vectors, CASCADE delete). Triggers auto-sync FTS on INSERT/UPDATE/DELETE. WAL journal mode.
-
-**Embeddings** (`src/embeddings.ts`): Uses `@huggingface/transformers` (WASM) with `Xenova/all-MiniLM-L6-v2` (q8 quantized, ~23MB, lazy-loaded on first use). Generates 384-dim L2-normalized vectors. Embeddings are stored on `brain_add` and regenerated on `brain_update` when title/content changes. Failures never block entry operations.
-
-**Search** (`src/tools/search.ts`): Hybrid search combining FTS5 keyword matching with cosine-similarity vector ranking, merged via Reciprocal Rank Fusion (RRF, k=60). Falls back to FTS5-only if embeddings are unavailable.
-
-**Project detection** (`project.ts`): Extracts `owner/repo` from git remote origin URL, falls back to directory name. Auto-applied to `brain_search` and `brain_add` when project param is omitted.
-
-**Tool registration** (`server.ts`): Each tool parses args with Zod schema, injects detected project where applicable, delegates to tool implementation. DB operations use better-sqlite3 (synchronous); embedding generation is async.
-
-## Schema & Types
-
-Defined in `src/types.ts`. Categories: `pattern`, `debugging`, `api`, `config`, `architecture`, `general`. Tags are stored comma-separated in DB, accepted as `string[]` in tool input. The `Entry` interface and all 7 Zod schemas (`SearchSchema`, `AddSchema`, `UpdateSchema`, `DeleteSchema`, `ListTagsSchema`, `ConsolidateSchema`, `SleepSchema`) live here.
+Detailed architecture knowledge is stored in the brain (use `brain_search` to find it).
 
 ## Conventions
 

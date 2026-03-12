@@ -1,0 +1,135 @@
+# Architecture
+
+## Overview
+
+An MCP server that gives Claude Code a persistent knowledge base. Runs over stdio transport, stores everything in a single SQLite file at `~/.claude/knowledge.db`. Entries are searchable via FTS5 full-text search and semantic vector search, fused with Reciprocal Rank Fusion (RRF).
+
+## Runtime
+
+```
+Claude Code ──stdio──▶ McpServer (src/index.ts)
+                         ├── initDb()         → opens SQLite, creates schema
+                         ├── detectProject()  → resolves project identifier
+                         └── registerTools()  → exposes 7 MCP tools
+```
+
+Startup is synchronous: DB init and project detection happen before the server connects to the transport. The embedding model (`all-MiniLM-L6-v2`, ONNX via `@huggingface/transformers` WASM) is lazy-loaded on first use.
+
+## Storage
+
+**Database:** `~/.claude/knowledge.db` (WAL mode, foreign keys enabled)
+
+### Schema
+
+```sql
+entries (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  title       TEXT NOT NULL,
+  content     TEXT NOT NULL,
+  tags        TEXT NOT NULL DEFAULT '',    -- comma-separated, lowercase
+  category    TEXT NOT NULL DEFAULT 'general',  -- pattern|debugging|api|config|architecture|general
+  project     TEXT DEFAULT NULL,           -- NULL = general knowledge
+  created_at  TEXT DEFAULT datetime('now'),
+  updated_at  TEXT DEFAULT datetime('now')
+)
+
+entries_fts  -- FTS5 virtual table (porter + unicode61 tokenizer)
+             -- content-synced with entries via INSERT/UPDATE/DELETE triggers
+
+embeddings (
+  entry_id    INTEGER PRIMARY KEY → entries(id) ON DELETE CASCADE,
+  embedding   BLOB NOT NULL,       -- Float32Array serialized to Buffer
+  model       TEXT NOT NULL,       -- e.g. "Xenova/all-MiniLM-L6-v2"
+  created_at  TEXT
+)
+```
+
+FTS5 is kept in sync automatically via three triggers (`entries_ai`, `entries_ad`, `entries_au`) that mirror inserts, deletes, and updates into the `entries_fts` virtual table.
+
+## Project Scoping
+
+`src/project.ts` resolves the current project identifier at startup:
+
+1. Try `git remote get-url origin` → extract `owner/repo` from the URL
+2. Fallback: use the working directory's basename
+
+All tools that accept a `project` parameter auto-fill it from the detected value when omitted. Searches include both project-scoped and general (`project IS NULL`) entries.
+
+## Search: Hybrid FTS5 + Vector
+
+`brain_search` runs two parallel ranking passes and merges them:
+
+### 1. FTS5 Pass
+- Query terms are OR'd, each quoted for literal matching
+- Joins `entries_fts` with `entries`, applies project/category filters
+- Returns up to `limit * 3` results ranked by FTS5's BM25-based `rank`
+- Uses `snippet()` for content excerpts (40-token window)
+
+### 2. Vector Pass
+- Generates a query embedding via `all-MiniLM-L6-v2` (quantized q8, WASM runtime)
+- Loads all stored embeddings for the project scope into memory
+- Ranks by cosine similarity (dot product — vectors are L2-normalized)
+- Returns top `limit * 3` entry IDs
+
+### 3. Reciprocal Rank Fusion (K=60)
+Merges both ranked lists:
+```
+score(entry) = Σ  1 / (K + rank_in_list)
+```
+For entries appearing in both lists, scores accumulate. Final results are sorted by RRF score descending, trimmed to `limit`.
+
+Vector-only hits (no FTS match) are back-filled from the `entries` table with a `substr(content, 1, 200)` snippet.
+
+If embedding generation fails (model not loaded, OOM), search degrades gracefully to FTS-only.
+
+## Tools
+
+| Tool | Function | Write? |
+|---|---|---|
+| `brain_search` | Hybrid FTS5 + vector search with RRF | No |
+| `brain_add` | Insert entry + generate/store embedding | Yes |
+| `brain_update` | Partial update by ID, regenerates embedding if title/content changed | Yes |
+| `brain_delete` | Delete by ID (cascades to embeddings via FK) | Yes |
+| `brain_list_tags` | Splits comma-separated tags via `json_each`, counts occurrences | No |
+| `brain_deduplicate` | Groups entries by normalized title + category across projects. Dry-run or apply (keeps most recent, merges tags, promotes to general) | Yes |
+| `brain_consolidate` | Dumps all entries grouped by category for LLM-driven review. Returns instructions for the AI to clean up using the other tools | No |
+
+All tool inputs are validated with Zod schemas (`src/types.ts`). Tags are normalized to lowercase on write.
+
+## Embedding Pipeline
+
+```
+text → buildEmbeddingText(title, content)    "Title. Content"
+     → getEmbeddingPipeline()                lazy singleton, ONNX WASM
+     → extractor(text, {pooling: "mean", normalize: true})
+     → Float32Array (384 dimensions)
+     → storeEmbedding() → Buffer → embeddings.embedding BLOB
+```
+
+Embeddings are generated on `brain_add` and regenerated on `brain_update` (when title or content changes). Failures are swallowed — the entry is still persisted without a vector.
+
+## Installation
+
+`install.sh` performs 5 steps:
+1. `npm install` + `npm run build`
+2. `claude mcp add --transport stdio --scope user knowledge-base -- node dist/index.js`
+3. Copies `knowledge-base.md` to `~/.claude/` (instructions for Claude)
+4. Adds `@knowledge-base.md` import to `~/.claude/CLAUDE.md`
+5. Copies slash commands to `~/.claude/commands/`
+
+## Slash Commands
+
+| Command | Purpose |
+|---|---|
+| `/brain-init` | Enable auto-knowledge behavior, migrate detailed CLAUDE.md content into the brain |
+| `/brain-sync` | Promote stable brain entries back to CLAUDE.md |
+| `/goodbye`, `/exit` | Trigger `brain_consolidate` for end-of-session cleanup |
+
+## Dependencies
+
+| Package | Role |
+|---|---|
+| `@modelcontextprotocol/sdk` | MCP server + stdio transport |
+| `better-sqlite3` | SQLite driver (native binding) |
+| `@huggingface/transformers` | ONNX WASM inference for embeddings |
+| `zod` | Input validation |
