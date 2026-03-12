@@ -15,6 +15,8 @@ interface SearchResult {
   project: string | null;
   content_snippet: string;
   updated_at: string;
+  source: string | null;
+  source_type: string | null;
 }
 
 interface EntryRow {
@@ -25,6 +27,8 @@ interface EntryRow {
   project: string | null;
   content: string;
   updated_at: string;
+  source: string | null;
+  source_type: string | null;
 }
 
 function recencyBoost(updatedAt: string): number {
@@ -71,7 +75,7 @@ export async function searchKnowledge(
     : "snippet(entries_fts, 1, '>>>', '<<<', '...', 40) as content_snippet";
 
   const ftsSql = `
-    SELECT e.id, e.title, e.tags, e.category, e.project, e.updated_at,
+    SELECT e.id, e.title, e.tags, e.category, e.project, e.updated_at, e.source, e.source_type,
            ${contentExpr}
     FROM entries_fts
     JOIN entries e ON e.id = entries_fts.rowid
@@ -138,7 +142,7 @@ export async function searchKnowledge(
     const contentCol = isFull ? "content" : "substr(content, 1, 200) as content";
     const rows = db
       .prepare(
-        `SELECT id, title, tags, category, project, updated_at, ${contentCol}
+        `SELECT id, title, tags, category, project, updated_at, source, source_type, ${contentCol}
          FROM entries WHERE id IN (${placeholders})`
       )
       .all(...vectorOnlyIds) as EntryRow[];
@@ -151,6 +155,8 @@ export async function searchKnowledge(
         project: row.project,
         content_snippet: row.content,
         updated_at: row.updated_at,
+        source: row.source,
+        source_type: row.source_type,
       });
     }
   }
@@ -198,8 +204,8 @@ function formatResults(results: SearchResult[]): string {
     results
       .map(
         (r) =>
-          `[${r.id}] ${r.title} (${r.category}${r.project ? ", " + r.project : ""})\n` +
-          `Tags: ${r.tags}\n` +
+          `[${r.id}] ${r.title} (${r.category}${r.project ? ", " + r.project : ""}${r.source_type ? ", " + r.source_type : ""})\n` +
+          `Tags: ${r.tags}${r.source ? " | Source: " + r.source : ""}\n` +
           `${r.content_snippet}`
       )
       .join("\n---\n")
