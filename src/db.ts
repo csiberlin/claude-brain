@@ -65,4 +65,16 @@ export function initDb(): void {
       FOREIGN KEY (entry_id) REFERENCES entries(id) ON DELETE CASCADE
     );
   `);
+
+  // Migration: add access tracking columns
+  const columns = db.pragma("table_info(entries)") as Array<{ name: string }>;
+  const colNames = new Set(columns.map((c) => c.name));
+  if (!colNames.has("last_accessed")) {
+    db.exec("ALTER TABLE entries ADD COLUMN last_accessed TEXT DEFAULT NULL");
+  }
+  if (!colNames.has("access_count")) {
+    db.exec(
+      "ALTER TABLE entries ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0"
+    );
+  }
 }

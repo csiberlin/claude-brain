@@ -20,6 +20,8 @@ export interface Entry {
   project: string | null;
   created_at: string;
   updated_at: string;
+  last_accessed: string | null;
+  access_count: number;
 }
 
 export const SearchSchema = z.object({
@@ -27,6 +29,7 @@ export const SearchSchema = z.object({
   project: z.string().optional().describe("Project identifier to scope results. Omit for all."),
   category: z.enum(categories).optional().describe("Filter by category"),
   limit: z.number().min(1).max(20).default(5).describe("Max results (default 5)"),
+  detail: z.enum(["brief", "full"]).default("brief").describe("'brief' returns snippets (default), 'full' returns complete content"),
 });
 
 export const AddSchema = z.object({
@@ -61,4 +64,8 @@ export const ConsolidateSchema = z.object({
 
 export const SleepSchema = z.object({
   project: z.string().optional().describe("Project identifier. Auto-detected if omitted."),
+});
+
+export const StatsSchema = z.object({
+  project: z.string().optional().describe("Filter stats by project. Omit for all."),
 });
