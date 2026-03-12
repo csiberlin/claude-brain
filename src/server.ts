@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { SearchSchema, AddSchema, UpdateSchema, DeleteSchema, ListTagsSchema, ConsolidateSchema, SleepSchema } from "./types.js";
+import { SearchSchema, AddSchema, UpdateSchema, DeleteSchema, ListTagsSchema, ConsolidateSchema, SleepSchema, StatsSchema } from "./types.js";
 import { searchKnowledge } from "./tools/search.js";
 import { addKnowledge } from "./tools/add.js";
 import { updateKnowledge } from "./tools/update.js";
@@ -7,6 +7,7 @@ import { deleteKnowledge } from "./tools/delete.js";
 import { listTags } from "./tools/list-tags.js";
 import { consolidate } from "./tools/consolidate.js";
 import { sleep } from "./tools/sleep.js";
+import { getStats } from "./tools/stats.js";
 import { getDetectedProject } from "./project.js";
 
 export function registerTools(server: McpServer): void {
@@ -87,6 +88,21 @@ export function registerTools(server: McpServer): void {
       }
       return {
         content: [{ type: "text", text: sleep(parsed) }],
+      };
+    }
+  );
+
+  server.tool(
+    "brain_stats",
+    "Knowledge base statistics: entry counts, embedding coverage, project/category breakdown, DB size. Low-token overview.",
+    StatsSchema.shape,
+    async (args) => {
+      const parsed = StatsSchema.parse(args);
+      if (parsed.project === undefined) {
+        parsed.project = getDetectedProject() ?? undefined;
+      }
+      return {
+        content: [{ type: "text", text: getStats(parsed) }],
       };
     }
   );
