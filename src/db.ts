@@ -24,8 +24,10 @@ export function initDb(): void {
       title TEXT NOT NULL,
       content TEXT NOT NULL,
       tags TEXT NOT NULL DEFAULT '',
-      category TEXT NOT NULL DEFAULT 'general',
+      category TEXT NOT NULL DEFAULT 'pattern',
       project TEXT DEFAULT NULL,
+      source TEXT DEFAULT NULL,
+      source_type TEXT DEFAULT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
