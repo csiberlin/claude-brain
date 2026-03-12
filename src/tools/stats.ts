@@ -19,6 +19,11 @@ interface CategoryRow {
   count: number;
 }
 
+interface SourceTypeRow {
+  source_type: string;
+  count: number;
+}
+
 interface TagRow {
   tag: string;
 }
@@ -64,6 +69,14 @@ export function getStats(args: z.infer<typeof StatsSchema>): string {
     .all(params) as CategoryRow[];
   const categoriesStr = categories.map((c) => `${c.category}(${c.count})`).join(", ");
 
+  // Source type breakdown
+  const sourceTypes = db
+    .prepare(
+      `SELECT COALESCE(source_type, 'unset') as source_type, COUNT(*) as count FROM entries ${whereClause} GROUP BY source_type ORDER BY count DESC`
+    )
+    .all(params) as Array<{ source_type: string; count: number }>;
+  const sourceTypesStr = sourceTypes.map((s) => `${s.source_type}(${s.count})`).join(", ");
+
   // Unique tags
   const tagSql = projectFilter
     ? `SELECT DISTINCT trim(value) as tag FROM entries, json_each('["' || replace(tags, ',', '","') || '"]') WHERE tags != '' AND (project = @project OR project IS NULL)`
@@ -96,6 +109,7 @@ export function getStats(args: z.infer<typeof StatsSchema>): string {
     `  Entries: ${total} (${withEmbeddings} with embeddings, ${withoutEmbeddings} without)`,
     `  Projects: ${projectsStr || "none"}`,
     `  Categories: ${categoriesStr || "none"}`,
+    `  Source types: ${sourceTypesStr || "none"}`,
     `  Tags: ${uniqueTags} unique`,
     `  DB size: ${dbSize}`,
     `  Never accessed: ${neverAccessed} entries`,
