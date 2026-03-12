@@ -1,12 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { SearchSchema, AddSchema, UpdateSchema, DeleteSchema, ListTagsSchema, ConsolidateSchema, SleepSchema, StatsSchema } from "./types.js";
+import { SearchSchema, AddSchemaBase, AddSchema, UpdateSchema, DeleteSchema, ListTagsSchema, DeduplicateSchema, ConsolidateReviewSchema, StatsSchema } from "./types.js";
 import { searchKnowledge } from "./tools/search.js";
 import { addKnowledge } from "./tools/add.js";
 import { updateKnowledge } from "./tools/update.js";
 import { deleteKnowledge } from "./tools/delete.js";
 import { listTags } from "./tools/list-tags.js";
-import { consolidate } from "./tools/consolidate.js";
-import { sleep } from "./tools/sleep.js";
+import { deduplicate } from "./tools/deduplicate.js";
+import { consolidateReview } from "./tools/consolidate-review.js";
 import { getStats } from "./tools/stats.js";
 import { getDetectedProject } from "./project.js";
 
@@ -28,8 +28,8 @@ export function registerTools(server: McpServer): void {
 
   server.tool(
     "brain_add",
-    "Store a new insight, pattern, or solution. Auto-tags with current project.",
-    AddSchema.shape,
+    "Store a new insight, pattern, or solution. Set source/source_type for trust tracking. Auto-tags with current project.",
+    AddSchemaBase.shape,
     async (args) => {
       const parsed = AddSchema.parse(args);
       if (parsed.project === undefined) {
@@ -70,24 +70,24 @@ export function registerTools(server: McpServer): void {
 
   server.tool(
     "brain_deduplicate",
-    "Find and merge duplicate entries across projects into general knowledge. Use apply=false for dry-run.",
-    ConsolidateSchema.shape,
+    "Find and merge duplicate entries across projects into general knowledge. Prefers higher-trust sources. Use apply=false for dry-run.",
+    DeduplicateSchema.shape,
     async (args) => ({
-      content: [{ type: "text", text: consolidate(ConsolidateSchema.parse(args)) }],
+      content: [{ type: "text", text: deduplicate(DeduplicateSchema.parse(args)) }],
     })
   );
 
   server.tool(
     "brain_consolidate",
-    "Review all knowledge entries for cleanup before session ends. Returns entries grouped by category with instructions. Auto-detects current project.",
-    SleepSchema.shape,
+    "Targeted review of entries needing attention. Flags stale maps, unused entries, and low-confidence items. Full sweep every 10th call or with full=true.",
+    ConsolidateReviewSchema.shape,
     async (args) => {
-      const parsed = SleepSchema.parse(args);
+      const parsed = ConsolidateReviewSchema.parse(args);
       if (parsed.project === undefined) {
         parsed.project = getDetectedProject() ?? undefined;
       }
       return {
-        content: [{ type: "text", text: sleep(parsed) }],
+        content: [{ type: "text", text: consolidateReview(parsed) }],
       };
     }
   );
