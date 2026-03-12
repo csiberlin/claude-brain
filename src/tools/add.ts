@@ -11,7 +11,7 @@ export async function addKnowledge(
   args: z.infer<typeof AddSchema>
 ): Promise<string> {
   const db = getDb();
-  const { title, content, tags, category, project } = args;
+  const { title, content, tags, category, project, source, source_type } = args;
 
   const normalizedTags = tags
     .map((t) => t.toLowerCase().trim())
@@ -20,8 +20,8 @@ export async function addKnowledge(
 
   const result = db
     .prepare(
-      `INSERT INTO entries (title, content, tags, category, project)
-       VALUES (@title, @content, @tags, @category, @project)`
+      `INSERT INTO entries (title, content, tags, category, project, source, source_type)
+       VALUES (@title, @content, @tags, @category, @project, @source, @source_type)`
     )
     .run({
       title,
@@ -29,6 +29,8 @@ export async function addKnowledge(
       tags: normalizedTags,
       category,
       project: project ?? null,
+      source: source ?? null,
+      source_type: source_type ?? null,
     });
 
   const entryId = result.lastInsertRowid as number;
