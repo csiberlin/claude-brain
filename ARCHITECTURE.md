@@ -148,6 +148,44 @@ Embeddings are generated on `brain_add` and regenerated on `brain_update` (when 
 | `/brain-sync` | Promote stable brain entries back to CLAUDE.md |
 | `/goodbye`, `/exit` | Trigger `brain_consolidate` for end-of-session cleanup |
 
+## Architecture Assessment
+
+### Why SQLite+FTS5+Embeddings is the right choice
+
+- **Zero infrastructure** — single file at `~/.claude/knowledge.db`, no server process
+- **Hybrid search** — keyword (FTS5) + semantic (vector) + recency boost, merged via RRF. This is the same pattern used by production systems (Vespa, Elastic)
+- **Low dependency count** — `better-sqlite3` + `@huggingface/transformers` + `zod`
+- **Fast for the target scale** — a personal knowledge base will have hundreds to low-thousands of entries
+- **Portable** — single file, easy backup, works offline
+- **Good tokenization** — porter stemmer + unicode61 handles most English queries well
+
+### Known weaknesses
+
+- **Brute-force vector search** — loads ALL embeddings into memory, computes cosine against every one. Fine at 500 entries, painful at 50K
+- **Naive query parsing** — splits on whitespace, wraps in `OR`. No phrase search, no `NEAR()`, no prefix matching, no field boosting
+- **No typo tolerance** — searching "debbuggin" won't find "debugging"
+- **English-only stemming** — the `porter` stemmer only handles English morphology. German, French, etc. words are stemmed incorrectly (e.g. "Verbindungen" won't reduce to "Verbindung"). The `unicode61` tokenizer handles word boundaries and diacritics for all languages, but stemming is English-limited. The vector search path partially compensates since `all-MiniLM-L6-v2` handles multilingual queries semantically.
+- **Tags stored as comma-separated string** — not normalized, no tag table, fragile
+- **No entry relationships** — flat list, no "related to" links between entries
+- **Embeddings silently fail** — if the WASM model doesn't load, search degrades to FTS-only with no warning to the user
+
+### Alternatives considered and rejected
+
+| Option | Why not |
+|--------|---------|
+| Elasticsearch/OpenSearch | Requires running a JVM server process — massively overkill for a personal CLI tool |
+| MeiliSearch/Typesense | Separate server process, HTTP dependency |
+| sqlite-vec / sqlite-vss | Adds native binary dependency; current WASM approach works at this scale |
+| LanceDB | Loses FTS5 quality, would need to reimplement keyword search |
+| PostgreSQL + pgvector | Server process, massive overkill |
+| DuckDB | Not designed for OLTP insert/update patterns |
+
+### Highest-impact improvements (within current architecture)
+
+1. **Improve FTS5 query building** — add `NEAR()` queries, prefix matching (`term*`), column weighting (`{title}: 2.0`)
+2. **Expose BM25 scores** — FTS5's `rank` uses BM25 internally; extracting raw scores enables more nuanced RRF blending
+3. **Adopt `sqlite-vec`** — if scale exceeds ~10K entries, replaces brute-force cosine scan with indexed vector search
+
 ## Dependencies
 
 | Package | Role |
