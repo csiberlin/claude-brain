@@ -1,4 +1,4 @@
-Review brain entries for promotion to CLAUDE.md files. Promotion moves stable, proven knowledge out of the brain and into CLAUDE.md where it's loaded every message — reducing search dependency and token cost.
+Review brain entries for promotion to CLAUDE.md files. Only entries that **prescribe behavior** ("always do X", "never do Y") belong in CLAUDE.md. Reference documentation (how something works, what properties exist) stays in brain permanently.
 
 ## Step 1: Gather entries
 
@@ -7,6 +7,7 @@ Review brain entries for promotion to CLAUDE.md files. Promotion moves stable, p
    - **Category** is `architecture`, `pattern`, or `config` (not `debugging`, `api`, or `general`)
    - **Age:** `created_at` is more than 7 days ago
    - **Project-scoped:** has a project tag matching the current project (not general/null)
+   - **Prescribes behavior:** contains a rule or convention, not just a description
 3. If no candidates found, report "No entries are ready for promotion yet" and stop.
 
 ## Step 2: Present candidates

@@ -28,6 +28,8 @@ That's it. Claude will now proactively store knowledge while working and clean i
 
 **On init**, `/brain-init` migrates detailed project knowledge from your CLAUDE.md into the brain and slims down the file to essentials. This reduces per-message token cost since CLAUDE.md is loaded every message, while brain entries are only fetched on demand.
 
+**With auto memory**, Claude Code's built-in `MEMORY.md` is loaded every message — keep it under 10 lines of meta-instructions only. Brain remains the primary knowledge store because on-demand search costs zero tokens when not needed.
+
 ## Tools
 
 All tools are prefixed with `brain_` for easy identification:
