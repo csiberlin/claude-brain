@@ -4,6 +4,17 @@
 
 An MCP server that gives Claude Code a persistent knowledge base. Runs over stdio transport, stores everything in a single SQLite file at `~/.claude/knowledge.db`. Entries are searchable via FTS5 full-text search and semantic vector search, fused with Reciprocal Rank Fusion (RRF).
 
+## Design Goal: Token Efficiency
+
+Claude Code injects `CLAUDE.md` and `MEMORY.md` into every message — their full contents count against the context window on every turn. This server exists to move the bulk of project knowledge out of those always-loaded files and into an on-demand store that costs zero tokens when not queried.
+
+The two-tier model:
+
+1. **CLAUDE.md** — minimal: build commands, file structure summary, conventions. Loaded every message, so kept small.
+2. **Brain (this server)** — everything else: architecture details, debugging notes, API quirks, patterns. Retrieved only when `brain_search` is called.
+
+This means a project with 50 knowledge entries pays for only the 3–5 relevant snippets returned by a search, not all 50 on every turn. The `/brain-init` command automates this migration: it moves detailed content from CLAUDE.md into the brain and slims the file to essentials. Search results are further compressed via FTS5 `snippet()` (40-token excerpts) rather than returning full entry content.
+
 ## Runtime
 
 ```
