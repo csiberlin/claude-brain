@@ -35,3 +35,4 @@ Detailed architecture knowledge is stored in the brain (use `brain_search` to fi
 - TypeScript strict mode, target ES2022, module Node16
 - Install script registers MCP server and installs slash commands to `~/.claude/commands/`
 - `/brain-init` command enables auto-knowledge, migrates detailed project knowledge from CLAUDE.md into the brain, and slims down CLAUDE.md to essentials
+- When compacting context, preserve: list of modified files, current task state, active tool names
