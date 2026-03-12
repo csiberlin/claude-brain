@@ -8,7 +8,20 @@ Initialize the knowledge base for this project. Do the following steps:
 ```
 ## Knowledge Base
 
-You have access to a persistent knowledge base via MCP tools. Use `brain_search` before starting work to check for relevant knowledge. Use `brain_add` to store insights, patterns, and solutions as you work. Use `/goodbye` or `/exit` at session end to consolidate.
+You have access to a persistent knowledge base via MCP tools.
+
+**Before work:** Call `brain_search` to check for maps and prior knowledge about the area you're working in.
+
+**When to store knowledge:**
+- After committing: review what you learned, store maps, decisions, and patterns
+- After research: external knowledge (web, docs, MCP) is expensive to re-acquire — store it
+- At discovery: when you find a proven pattern or an anti-pattern worth warning about
+
+**What NOT to store:** routine fixes, things derivable from code or git, exploration that led nowhere.
+
+**Tiers:** `map` (compressed file/module/API summaries), `decision` (non-obvious choices and their why), `pattern` (proven approaches and anti-patterns), `api` (external library/service knowledge from research).
+
+Use `/goodbye` or `/exit` at session end to consolidate.
 ```
 
 3. If `~/.claude/CLAUDE.md` contains an old `@knowledge-base.md` import line, remove it — that pattern is deprecated in favor of the inline section above.
@@ -23,7 +36,7 @@ You have access to a persistent knowledge base via MCP tools. Use `brain_search`
    - A concise, searchable title
    - The full, specific content (don't summarize — preserve the detail)
    - Relevant tags (technology names, file paths, concepts)
-   - The appropriate category: `architecture`, `debugging`, `api`, `config`, `pattern`, or `general`
+   - The appropriate category: `map`, `decision`, `pattern`, or `api`
 5. After all entries are added, rewrite the project's CLAUDE.md to keep only the essentials. The slimmed-down file should contain:
    - Project name and one-line description
    - Build/run/test commands
