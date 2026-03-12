@@ -36,3 +36,20 @@ Detailed architecture knowledge is stored in the brain (use `brain_search` to fi
 - Install script registers MCP server and installs slash commands to `~/.claude/commands/`
 - `/brain-init` command enables auto-knowledge with tiered categories (`map`, `decision`, `pattern`, `api`), migrates detailed project knowledge from CLAUDE.md into the brain, and slims down CLAUDE.md to essentials
 - When compacting context, preserve: list of modified files, current task state, active tool names
+
+## Journey Log (`journey.md`)
+
+Narrative of the project's development, written from the developer's perspective using session transcripts.
+
+**Examined sessions (already incorporated):**
+- `81dbfc53` — The spark (Copilot code index idea)
+- `9b7052f1` — Competitive research, 5 embedding approaches, picking option E
+- `64e498b2` — Implementation, pragmatic cuts (no backfill, no export/import), brain vs auto-memory
+- `d0eca985` — Token economics revelation, inverting CLAUDE.md model, brain-init design
+
+**Not yet examined (need review for future journey updates):**
+- `217a6c4b`, `2be3a1ac`, `365780c8`, `406afe1b`, `4e045eb3`, `5a43b850`
+- `60bacfb0`, `60e6ea98`, `6a4a4afc`, `7aa39c76`, `9fae93a6`, `ac2e94b8`, `e491e805`
+- `6396f2f3` — Current session (journey writing)
+
+**To add:** Today's "add statistics" session, token efficiency refactor, tiered memory redesign, and any other sessions with significant user-driven decisions.
