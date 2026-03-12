@@ -34,5 +34,5 @@ Detailed architecture knowledge is stored in the brain (use `brain_search` to fi
 - ESM modules (`"type": "module"` in package.json, `.js` extensions in imports)
 - TypeScript strict mode, target ES2022, module Node16
 - Install script registers MCP server and installs slash commands to `~/.claude/commands/`
-- `/brain-init` command enables auto-knowledge, migrates detailed project knowledge from CLAUDE.md into the brain, and slims down CLAUDE.md to essentials
+- `/brain-init` command enables auto-knowledge with tiered categories (`map`, `decision`, `pattern`, `api`), migrates detailed project knowledge from CLAUDE.md into the brain, and slims down CLAUDE.md to essentials
 - When compacting context, preserve: list of modified files, current task state, active tool names
