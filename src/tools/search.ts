@@ -14,6 +14,7 @@ interface SearchResult {
   category: string;
   project: string | null;
   content_snippet: string;
+  updated_at: string;
 }
 
 interface EntryRow {
@@ -23,13 +24,21 @@ interface EntryRow {
   category: string;
   project: string | null;
   content: string;
+  updated_at: string;
+}
+
+function recencyBoost(updatedAt: string): number {
+  const days =
+    (Date.now() - new Date(updatedAt).getTime()) / 86_400_000;
+  return 1 / (1 + days / 365);
 }
 
 export async function searchKnowledge(
   args: z.infer<typeof SearchSchema>
 ): Promise<string> {
   const db = getDb();
-  const { query, project, category, limit } = args;
+  const { query, project, category, limit, detail } = args;
+  const isFull = detail === "full";
 
   // Escape FTS5 special characters and build query
   const ftsQuery = query
@@ -57,9 +66,13 @@ export async function searchKnowledge(
     params.category = category;
   }
 
+  const contentExpr = isFull
+    ? "e.content as content_snippet"
+    : "snippet(entries_fts, 1, '>>>', '<<<', '...', 40) as content_snippet";
+
   const ftsSql = `
-    SELECT e.id, e.title, e.tags, e.category, e.project,
-           snippet(entries_fts, 1, '>>>', '<<<', '...', 40) as content_snippet
+    SELECT e.id, e.title, e.tags, e.category, e.project, e.updated_at,
+           ${contentExpr}
     FROM entries_fts
     JOIN entries e ON e.id = entries_fts.rowid
     WHERE ${conditions.join(" AND ")}
@@ -82,16 +95,23 @@ export async function searchKnowledge(
   }
 
   // --- Merge with Reciprocal Rank Fusion ---
+  const K = 60;
+
   if (vectorRankedIds.length === 0) {
-    // No vector results — return FTS only (trimmed to limit)
-    const trimmed = ftsResults.slice(0, limit);
+    // No vector results — combine FTS rank with recency and return
+    const scored = ftsResults.map((r, i) => ({
+      result: r,
+      score: (1 / (K + i)) * recencyBoost(r.updated_at),
+    }));
+    scored.sort((a, b) => b.score - a.score);
+    const trimmed = scored.slice(0, limit).map((s) => s.result);
     if (trimmed.length === 0) {
       return "No matching entries found.";
     }
+    trackAccess(db, trimmed);
     return formatResults(trimmed);
   }
 
-  const K = 60;
   const scores = new Map<number, number>();
 
   // FTS ranks
@@ -106,24 +126,19 @@ export async function searchKnowledge(
     scores.set(id, (scores.get(id) ?? 0) + 1 / (K + i));
   }
 
-  // Sort by RRF score descending
-  const merged = [...scores.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, limit);
-
   // Build lookup of FTS results by id
   const ftsById = new Map(ftsResults.map((r) => [r.id, r]));
 
   // For vector-only hits, fetch entry data
-  const vectorOnlyIds = merged
-    .map(([id]) => id)
-    .filter((id) => !ftsById.has(id));
+  const allIds = [...scores.keys()];
+  const vectorOnlyIds = allIds.filter((id) => !ftsById.has(id));
 
   if (vectorOnlyIds.length > 0) {
     const placeholders = vectorOnlyIds.map(() => "?").join(",");
+    const contentCol = isFull ? "content" : "substr(content, 1, 200) as content";
     const rows = db
       .prepare(
-        `SELECT id, title, tags, category, project, substr(content, 1, 200) as content
+        `SELECT id, title, tags, category, project, updated_at, ${contentCol}
          FROM entries WHERE id IN (${placeholders})`
       )
       .all(...vectorOnlyIds) as EntryRow[];
@@ -135,9 +150,23 @@ export async function searchKnowledge(
         category: row.category,
         project: row.project,
         content_snippet: row.content,
+        updated_at: row.updated_at,
       });
     }
   }
+
+  // Apply recency boost to RRF scores
+  for (const [id, score] of scores) {
+    const entry = ftsById.get(id);
+    if (entry?.updated_at) {
+      scores.set(id, score * recencyBoost(entry.updated_at));
+    }
+  }
+
+  // Sort by boosted RRF score descending
+  const merged = [...scores.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit);
 
   const results = merged
     .map(([id]) => ftsById.get(id))
@@ -147,7 +176,20 @@ export async function searchKnowledge(
     return "No matching entries found.";
   }
 
+  trackAccess(db, results);
   return formatResults(results);
+}
+
+function trackAccess(
+  db: ReturnType<typeof getDb>,
+  results: SearchResult[]
+): void {
+  const ids = results.map((r) => r.id);
+  if (ids.length === 0) return;
+  const placeholders = ids.map(() => "?").join(",");
+  db.prepare(
+    `UPDATE entries SET last_accessed = datetime('now'), access_count = access_count + 1 WHERE id IN (${placeholders})`
+  ).run(...ids);
 }
 
 function formatResults(results: SearchResult[]): string {
