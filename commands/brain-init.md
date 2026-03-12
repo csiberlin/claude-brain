@@ -2,63 +2,17 @@ Initialize the knowledge base for this project. Do the following steps:
 
 ## Step 1: Enable automatic brain usage
 
-1. Read `~/.claude/knowledge-base.md`. If it doesn't exist, create it with the following content:
+1. Read `~/.claude/CLAUDE.md`. If it doesn't exist, create it.
+2. Check if it already contains a `## Knowledge Base` section. If it does, replace it with the minimal reference below. If it doesn't, append it.
 
 ```
 ## Knowledge Base
 
-You have access to a persistent knowledge base via MCP tools (`brain_add`, `brain_search`, `brain_update`, `brain_delete`, `brain_consolidate`). Use it proactively — **not when asked, but automatically**.
-
-### Token-Efficient Design
-
-Two tiers of knowledge — brain is primary, CLAUDE.md is for rules only:
-
-1. **CLAUDE.md files** — Rules and conventions ("always do X", "never do Y"). Loaded every message, so keep concise. Only promote brain entries here if they prescribe behavior.
-2. **Brain (MCP)** — Everything else: architecture details, debugging gotchas, API quirks, patterns. Searched on demand via `brain_search`. Zero token cost when not needed.
-
-**Auto memory (`MEMORY.md`)** is loaded every message — keep it under 10 lines. Do NOT move brain content here. It exists only for meta-instructions, not knowledge storage.
-
-### Before Starting Work
-- Call `brain_search` with keywords relevant to the task (project name, technology, problem domain)
-- Check for existing patterns, past bugs, or architectural decisions that apply
-
-### During Work — Mandatory Storage Triggers
-After ANY of the following events, call `brain_add` immediately:
-
-1. **You resolve a build/compile error** — store the error cause and fix (category: `debugging`)
-2. **You discover an API quirk or gotcha** — e.g., namespace collisions, unexpected property names (category: `api`)
-3. **You establish a pattern used across multiple files** — e.g., how messages are plumbed (category: `pattern`)
-4. **You make or encounter an architectural decision** — e.g., which ViewModel owns which data (category: `architecture`)
-5. **You learn a configuration detail** — e.g., solution file location, build commands (category: `config`)
-6. **You work around a framework limitation** — e.g., using aliases for type conflicts (category: `debugging`)
-
-**Rule of thumb:** If you had to figure something out (it wasn't obvious from the code alone), store it.
-
-### What Makes a Good Entry
-- **Title:** Short, searchable (e.g., "DevExpress WPF: ColumnDefinition name collision")
-- **Content:** Specific and actionable — include the fix, not just the problem. Include file paths when relevant.
-- **Tags:** Technology names, project names, error codes, concepts
-- **Project:** Set the project identifier when the knowledge is project-specific
-
-### Knowledge Promotion (Brain to CLAUDE.md)
-A promotion candidate must meet ALL criteria:
-- Category is `architecture`, `pattern`, or `config`
-- Created more than 7 days ago
-- Has a project tag (not general)
-- Prescribes behavior, not just describes it
-- Not already in CLAUDE.md
-
-Use `/brain-sync` to review candidates. During `/goodbye` or `/exit`, flag candidates but do not auto-promote. After promoting, delete the brain entry.
-
-### Before Session Ends
-When the session is wrapping up, use `/goodbye` or `/exit` to dispatch consolidation.
-
-Categories: `pattern`, `debugging`, `api`, `config`, `architecture`, `general`
+You have access to a persistent knowledge base via MCP tools. Use `brain_search` before starting work to check for relevant knowledge. Use `brain_add` to store insights, patterns, and solutions as you work. Use `/goodbye` or `/exit` at session end to consolidate.
 ```
 
-2. Read `~/.claude/CLAUDE.md`. If it doesn't exist, create it with just `@knowledge-base.md`.
-3. If `~/.claude/CLAUDE.md` exists but does NOT contain `@knowledge-base.md`, append `@knowledge-base.md` to the end.
-4. If `~/.claude/CLAUDE.md` contains an old inline "## Knowledge Base" section, remove it (the reference to `knowledge-base.md` replaces it).
+3. If `~/.claude/CLAUDE.md` contains an old `@knowledge-base.md` import line, remove it — that pattern is deprecated in favor of the inline section above.
+4. If `~/.claude/knowledge-base.md` exists, delete it — its content is now available via `/brain-knowledge`.
 
 ## Step 2: Migrate project knowledge from CLAUDE.md to brain
 
@@ -83,4 +37,10 @@ Summarize what was done:
 - Whether auto-usage was enabled or was already enabled
 - How many entries were migrated from CLAUDE.md to the brain (list titles)
 - What was kept in CLAUDE.md
-- Mention `/goodbye` and `/exit` for end-of-session consolidation
+
+Available commands:
+- `/brain-knowledge` — quick reference for when and how to store knowledge
+- `/brain-sync` — promote stable brain entries back to CLAUDE.md
+- `/goodbye` or `/exit` — consolidate knowledge at session end
+- Use `brain_search` with `detail: "full"` to retrieve complete entry content
+- Use `brain_stats` to see entry counts, embedding coverage, and DB size
