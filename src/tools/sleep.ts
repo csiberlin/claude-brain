@@ -56,7 +56,7 @@ export function sleep(args: z.infer<typeof SleepSchema>): string {
     lines.push("");
     for (const e of catEntries) {
       lines.push(`### [${e.id}] ${e.title}`);
-      lines.push(`Project: ${e.project ?? "(general)"} | Tags: ${e.tags || "(none)"} | Updated: ${e.updated_at}`);
+      lines.push(`Project: ${e.project ?? "(general)"} | Tags: ${e.tags || "(none)"} | Updated: ${e.updated_at} | Accessed: ${e.access_count}x`);
       lines.push("");
       lines.push(e.content);
       lines.push("");
