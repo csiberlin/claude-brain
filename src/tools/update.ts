@@ -12,7 +12,7 @@ export async function updateKnowledge(
   args: z.infer<typeof UpdateSchema>
 ): Promise<string> {
   const db = getDb();
-  const { id, title, content, tags, category, project } = args;
+  const { id, title, content, tags, category, project, source, source_type } = args;
 
   const sets: string[] = ["updated_at = datetime('now')"];
   const params: Record<string, unknown> = { id };
@@ -36,6 +36,14 @@ export async function updateKnowledge(
   if (project !== undefined) {
     sets.push("project = @project");
     params.project = project;
+  }
+  if (source !== undefined) {
+    sets.push("source = @source");
+    params.source = source;
+  }
+  if (source_type !== undefined) {
+    sets.push("source_type = @source_type");
+    params.source_type = source_type;
   }
 
   if (sets.length === 1) {
