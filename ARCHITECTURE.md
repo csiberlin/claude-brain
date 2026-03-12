@@ -28,7 +28,7 @@ This means a project with 50 knowledge entries pays for only the 3–5 relevant 
 Claude Code ──stdio──▶ McpServer (src/index.ts)
                          ├── initDb()         → opens SQLite, creates schema
                          ├── detectProject()  → resolves project identifier
-                         └── registerTools()  → exposes 7 MCP tools
+                         └── registerTools()  → exposes 8 MCP tools
 ```
 
 Startup is synchronous: DB init and project detection happen before the server connects to the transport. The embedding model (`all-MiniLM-L6-v2`, ONNX via `@huggingface/transformers` WASM) is lazy-loaded on first use.
@@ -41,14 +41,16 @@ Startup is synchronous: DB init and project detection happen before the server c
 
 ```sql
 entries (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  title       TEXT NOT NULL,
-  content     TEXT NOT NULL,
-  tags        TEXT NOT NULL DEFAULT '',    -- comma-separated, lowercase
-  category    TEXT NOT NULL DEFAULT 'general',  -- pattern|debugging|api|config|architecture|general
-  project     TEXT DEFAULT NULL,           -- NULL = general knowledge
-  created_at  TEXT DEFAULT datetime('now'),
-  updated_at  TEXT DEFAULT datetime('now')
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  title         TEXT NOT NULL,
+  content       TEXT NOT NULL,
+  tags          TEXT NOT NULL DEFAULT '',    -- comma-separated, lowercase
+  category      TEXT NOT NULL DEFAULT 'general',  -- pattern|debugging|api|config|architecture|general
+  project       TEXT DEFAULT NULL,           -- NULL = general knowledge
+  created_at    TEXT DEFAULT datetime('now'),
+  updated_at    TEXT DEFAULT datetime('now'),
+  last_accessed TEXT DEFAULT NULL,           -- set on brain_search hit
+  access_count  INTEGER NOT NULL DEFAULT 0   -- incremented on brain_search hit
 )
 
 entries_fts  -- FTS5 virtual table (porter + unicode61 tokenizer)
@@ -96,6 +98,8 @@ score(entry) = Σ  1 / (K + rank_in_list)
 ```
 For entries appearing in both lists, scores accumulate. Final results are sorted by RRF score descending, trimmed to `limit`.
 
+RRF scores are then multiplied by a recency boost: `1 / (1 + days_since_update / 365)`. This gently favors recent entries (1-day-old: ~1.0x, 1-year-old: ~0.5x) without burying old knowledge.
+
 Vector-only hits (no FTS match) are back-filled from the `entries` table with a `substr(content, 1, 200)` snippet.
 
 If embedding generation fails (model not loaded, OOM), search degrades gracefully to FTS-only.
@@ -111,6 +115,7 @@ If embedding generation fails (model not loaded, OOM), search degrades gracefull
 | `brain_list_tags` | Splits comma-separated tags via `json_each`, counts occurrences | No |
 | `brain_deduplicate` | Groups entries by normalized title + category across projects. Dry-run or apply (keeps most recent, merges tags, promotes to general) | Yes |
 | `brain_consolidate` | Dumps all entries grouped by category for LLM-driven review. Returns instructions for the AI to clean up using the other tools | No |
+| `brain_stats` | Entry counts, embedding coverage, project/category breakdown, DB size | No |
 
 All tool inputs are validated with Zod schemas (`src/types.ts`). Tags are normalized to lowercase on write.
 
@@ -131,8 +136,8 @@ Embeddings are generated on `brain_add` and regenerated on `brain_update` (when 
 `install.sh` performs 5 steps:
 1. `npm install` + `npm run build`
 2. `claude mcp add --transport stdio --scope user knowledge-base -- node dist/index.js`
-3. Copies `knowledge-base.md` to `~/.claude/` (instructions for Claude)
-4. Adds `@knowledge-base.md` import to `~/.claude/CLAUDE.md`
+3. Writes a minimal brain reference to `~/.claude/CLAUDE.md` (3 lines, ~50 tokens)
+4. Removes legacy `@knowledge-base.md` import and `~/.claude/knowledge-base.md` if present
 5. Copies slash commands to `~/.claude/commands/`
 
 ## Slash Commands

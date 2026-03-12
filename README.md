@@ -54,6 +54,7 @@ All tools are prefixed with `brain_` for easy identification:
 | `brain_list_tags` | List all tags with usage counts. |
 | `brain_deduplicate` | Find and merge duplicate entries across projects. |
 | `brain_consolidate` | Review all entries for cleanup (contradictions, redundancies, staleness). |
+| `brain_stats` | Entry counts, embedding coverage, category/project breakdown, DB size. |
 
 ## Slash Commands
 

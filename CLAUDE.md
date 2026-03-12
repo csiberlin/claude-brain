@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-An MCP server providing a local SQLite-based knowledge base for Claude Code. Exposes 7 tools (`brain_search`, `brain_add`, `brain_update`, `brain_delete`, `brain_list_tags`, `brain_deduplicate`, `brain_consolidate`) over stdio transport. Database lives at `~/.claude/knowledge.db` with FTS5 full-text search and semantic vector search (hybrid ranking via Reciprocal Rank Fusion). Includes slash commands: `/brain-init` (enable auto-knowledge + migrate CLAUDE.md to brain), `/goodbye` and `/exit` (end-of-session consolidation).
+An MCP server providing a local SQLite-based knowledge base for Claude Code. Exposes 8 tools (`brain_search`, `brain_add`, `brain_update`, `brain_delete`, `brain_list_tags`, `brain_deduplicate`, `brain_consolidate`, `brain_stats`) over stdio transport. Database lives at `~/.claude/knowledge.db` with FTS5 full-text search and semantic vector search (hybrid ranking via Reciprocal Rank Fusion). Includes slash commands: `/brain-init` (enable auto-knowledge + migrate CLAUDE.md to brain), `/goodbye` and `/exit` (end-of-session consolidation).
 
 ## Build & Run
 
