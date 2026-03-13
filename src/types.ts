@@ -30,30 +30,15 @@ export const SearchSchema = z.object({
   detail: z.enum(["brief", "full"]).default("brief").describe("'brief' returns snippets (default), 'full' returns complete content"),
 });
 
-export const AddSchemaBase = z.object({
-  title: z.string().describe("Concise, searchable title"),
-  content: z.string().describe("The knowledge content. Be specific and actionable."),
-  tags: z.array(z.string()).describe("Tags: technology names, concepts, error codes"),
-  category: z.enum(categories).default("pattern"),
-  project: z.string().optional().describe("Project identifier. Omit for general knowledge."),
-  source: z.string().optional().describe("Where this knowledge comes from: file path, URL, library name"),
-  source_type: z.enum(sourceTypes).optional().describe("Trust level: docs, code, verified, research, inferred"),
-});
-
-export const AddSchema = AddSchemaBase.refine(
-  (d) => !d.source_type || d.source,
-  { message: "source is required when source_type is set", path: ["source"] }
-);
-
-export const UpdateSchema = z.object({
-  id: z.number().describe("Entry ID to update"),
-  title: z.string().optional(),
-  content: z.string().optional(),
-  tags: z.array(z.string()).optional(),
-  category: z.enum(categories).optional(),
-  project: z.string().nullable().optional(),
-  source: z.string().nullable().optional(),
-  source_type: z.enum(sourceTypes).nullable().optional(),
+export const UpsertSchema = z.object({
+  id: z.number().optional().describe("Entry ID to update. Omit to create new entry."),
+  title: z.string().optional().describe("Concise, searchable title (required for new entries)"),
+  content: z.string().optional().describe("The knowledge content (required for new entries)"),
+  tags: z.array(z.string()).optional().describe("Tags: technology names, concepts, error codes (required for new entries)"),
+  category: z.enum(categories).optional().describe("Entry category (default: pattern for new entries)"),
+  project: z.string().nullable().optional().describe("Project identifier. Omit for auto-detect, null for general."),
+  source: z.string().nullable().optional().describe("Where this knowledge comes from"),
+  source_type: z.enum(sourceTypes).nullable().optional().describe("Trust level: docs, code, verified, research, inferred"),
 });
 
 export const DeleteSchema = z.object({
