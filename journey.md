@@ -261,6 +261,50 @@ My thesis held: **the right knowledge at the right time beats more knowledge all
 
 ---
 
+## The Insight Buffer: Surviving Dead Ends (March 13)
+
+A subtle problem had been nagging me. The knowledge strategy said "add insights at commit time" — but what if the session ends before a commit? Context compaction, `/clear`, or just closing the terminal — all of those destroy insights that existed only in conversation context.
+
+Worse: what about dead-end sessions? Sometimes you spend 40,000 tokens researching an API, try an implementation approach, and it doesn't work. You abandon the branch. But the API knowledge you gathered? That's real. That's expensive to re-acquire. The implementation details are worthless, but the research isn't.
+
+### The Buffer
+
+The solution was deliberately low-tech: a JSONL file at `~/.claude/pending-insights.jsonl`. During work, Claude appends insights as JSON lines instead of calling `brain_add` directly. Each line includes a `tokens_spent` field — the approximate token cost to discover this insight. When you see "this API quirk cost 15,000 tokens to figure out," you think twice before discarding it.
+
+### Two Ways to End a Session
+
+This led to an interesting design question: how do you flush the buffer?
+
+**Happy path (`/brain-keep`):** Work was committed, everything validated. Promote all buffered insights to the brain. If 5 or more entries were promoted, run consolidation automatically — heavy sessions benefit from cleanup.
+
+**Dead end (`/brain-abandon`):** The implementation didn't work out. But knowledge has a category, and categories reveal intent:
+- `api` and `pattern` entries are **general knowledge** — API behavior, library quirks, proven/disproven approaches. True regardless of whether the implementation worked. **Keep these.**
+- `map` and `decision` entries are **implementation-specific** — code structure summaries, architectural choices for an approach that failed. Misleading in future sessions. **Discard these.**
+
+This category-based triage was the key insight. The four-tier system designed earlier wasn't just for organization — it encodes the *epistemic status* of knowledge. Maps and decisions are bound to a specific implementation. Patterns and API knowledge transcend it.
+
+> *"just to make it clear: by dead-end I mean that we just stop working on that branch/worktree. although the stuff we implemented did not work, we still gathered new knowledge."*
+
+That quote captures the philosophy: **failed implementations still produce valuable knowledge, if you can separate the universal from the specific.**
+
+### The Naming Journey
+
+The commands went through a quick evolution:
+- Started with `/goodbye` (existing) and a new `/brain-keep` + `/brain-abandon`
+- Realized `/brain-keep` and `/goodbye` were redundant — both promote insights at session end
+- Renamed `/goodbye` → alias for `/brain-keep` (backward compatibility)
+- `/exit` stays as consolidation-only, but now warns if the buffer is non-empty
+
+The naming tells you everything: *keep* your insights, or *abandon* the dead-end approach (but still keep what you learned about the world).
+
+### No Code Changes
+
+The entire feature is implemented as slash commands and conventions — zero MCP tools added, zero schema changes, zero TypeScript modified. The buffer is a plain file that Claude reads and writes directly. `brain_add` is still the only way knowledge enters the database.
+
+This reinforced the lesson from the promotion system: **in agentic architectures, the prompt IS the feature.** Sometimes the right abstraction isn't a new tool — it's better instructions for the existing ones.
+
+---
+
 ## What I Learned About Agentic Development
 
 ### 1. The Agent is a Collaborator, Not a Tool
@@ -307,11 +351,12 @@ Claude Code's session model (ephemeral conversations, persistent files) initiall
 
 ## The Current State
 
-As of today (March 12, 2026), the project is:
+As of today (March 13, 2026), the project is:
 
 - **8 MCP tools** with hybrid FTS5 + vector search, RRF ranking, recency weighting, access tracking
-- **5 slash commands** for initialization, knowledge reference, promotion, and session-end consolidation
+- **7 slash commands** for initialization, knowledge reference, promotion, insight buffer flush, and session-end consolidation
 - **4 tiered categories** with source tracking and trust hierarchy
+- **Insight buffer** (`pending-insights.jsonl`) for persisting discoveries before commit
 - **Targeted consolidation** that surfaces only what needs attention
 - **~650 tokens saved per message** vs. the original design
 - **Zero external dependencies** beyond Node.js and SQLite
