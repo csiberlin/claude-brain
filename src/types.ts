@@ -50,13 +50,11 @@ export const InfoSchema = z.object({
   include_tags: z.boolean().default(false).describe("Include tag listing with counts"),
 });
 
-export const ConsolidateReviewSchema = z.object({
+export const MaintainSchema = z.object({
   project: z.string().optional().describe("Project identifier. Auto-detected if omitted."),
   full: z.boolean().default(false).describe("Force full review instead of targeted"),
-});
-
-export const DeduplicateSchema = z.object({
-  apply: z.boolean().default(false).describe("false = dry-run (show candidates), true = merge duplicates into general knowledge"),
-  min_projects: z.number().min(2).default(2).describe("Min projects an entry must appear in to be a candidate (default 2)"),
+  deduplicate: z.boolean().default(false).describe("Also run cross-project deduplication"),
+  apply_dedup: z.boolean().default(false).describe("Actually merge duplicates (false = dry-run)"),
+  min_projects: z.number().min(2).default(2).describe("Min projects for dedup candidates (default 2)"),
 });
 

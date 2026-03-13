@@ -1,12 +1,41 @@
 import { getDb } from "../db.js";
-import { ConsolidateReviewSchema } from "../types.js";
-import type { z } from "zod";
+import { MaintainSchema } from "../types.js";
 import type { Entry } from "../types.js";
+import type { z } from "zod";
 
 const OUTPUT_CAP = 20;
 
-interface MetadataRow {
-  value: string;
+const TRUST_ORDER: Record<string, number> = {
+  docs: 5,
+  code: 4,
+  verified: 4,
+  research: 3,
+  inferred: 2,
+};
+
+function trustScore(sourceType: string | null): number {
+  if (!sourceType) return 1;
+  return TRUST_ORDER[sourceType] ?? 1;
+}
+
+interface MetadataRow { value: string; }
+interface DuplicateGroup {
+  title: string;
+  tags: string;
+  category: string;
+  ids: string;
+  projects: string;
+  project_count: number;
+}
+interface EntryRow {
+  id: number;
+  title: string;
+  content: string;
+  tags: string;
+  category: string;
+  project: string | null;
+  source_type: string | null;
+  updated_at: string;
 }
 
 function getConsolidationCount(db: ReturnType<typeof getDb>): number {
@@ -25,9 +54,9 @@ function incrementConsolidationCount(db: ReturnType<typeof getDb>): number {
   return next;
 }
 
-export function consolidateReview(args: z.infer<typeof ConsolidateReviewSchema>): string {
+export function maintain(args: z.infer<typeof MaintainSchema>): string {
   const db = getDb();
-  const { project, full } = args;
+  const { project, full, deduplicate: runDedup, apply_dedup, min_projects } = args;
 
   const count = incrementConsolidationCount(db);
   const isFullReview = full || (count % 10 === 0);
@@ -38,11 +67,20 @@ export function consolidateReview(args: z.infer<typeof ConsolidateReviewSchema>)
     : "";
   const params: Record<string, unknown> = projectFilter ? { project } : {};
 
+  const parts: string[] = [];
+
   if (isFullReview) {
-    return fullReview(db, whereBase, params, count);
+    parts.push(fullReview(db, whereBase, params, count));
+  } else {
+    parts.push(targetedReview(db, whereBase, params, count));
   }
 
-  return targetedReview(db, whereBase, params, count);
+  if (runDedup) {
+    parts.push("");
+    parts.push(deduplicateEntries(db, apply_dedup, min_projects));
+  }
+
+  return parts.join("\n");
 }
 
 function targetedReview(
@@ -54,7 +92,6 @@ function targetedReview(
   const untilFull = 10 - (count % 10);
   const candidates: Array<{ entry: Entry; reason: string }> = [];
 
-  // 1. Stale maps (category='map', updated > 14 days ago)
   const staleMaps = db.prepare(`
     SELECT * FROM entries e
     ${whereBase ? whereBase + " AND" : "WHERE"}
@@ -67,7 +104,6 @@ function targetedReview(
     candidates.push({ entry: e, reason: "Stale map (>14 days)" });
   }
 
-  // 2. Never-accessed entries (access_count=0, created > 7 days ago)
   const neverAccessed = db.prepare(`
     SELECT * FROM entries e
     ${whereBase ? whereBase + " AND" : "WHERE"}
@@ -82,7 +118,6 @@ function targetedReview(
     }
   }
 
-  // 3. Low-confidence entries (inferred/research, >30 days, access_count < 3)
   const lowConfidence = db.prepare(`
     SELECT * FROM entries e
     ${whereBase ? whereBase + " AND" : "WHERE"}
@@ -120,7 +155,7 @@ function targetedReview(
   }
 
   lines.push("");
-  lines.push("Actions: `brain_update` to refresh, `brain_delete` to remove, `brain_deduplicate` for cross-project merges.");
+  lines.push("Actions: `brain_upsert` to refresh, `brain_delete` to remove. Use deduplicate=true for cross-project merges.");
 
   return lines.join("\n");
 }
@@ -174,7 +209,102 @@ function fullReview(
     lines.push("");
   }
 
-  lines.push("Actions: `brain_update` to fix, `brain_delete` to remove, `brain_deduplicate` for cross-project merges.");
+  lines.push("Actions: `brain_upsert` to fix, `brain_delete` to remove. Use deduplicate=true for cross-project merges.");
 
   return lines.join("\n");
+}
+
+function deduplicateEntries(
+  db: ReturnType<typeof getDb>,
+  apply: boolean,
+  min_projects: number
+): string {
+  const groups = db
+    .prepare(
+      `SELECT
+        lower(trim(title)) as title,
+        tags,
+        category,
+        group_concat(id) as ids,
+        group_concat(DISTINCT project) as projects,
+        COUNT(DISTINCT project) as project_count
+      FROM entries
+      WHERE project IS NOT NULL
+      GROUP BY lower(trim(title)), category
+      HAVING COUNT(DISTINCT project) >= @min_projects
+      ORDER BY project_count DESC`
+    )
+    .all({ min_projects }) as DuplicateGroup[];
+
+  if (groups.length === 0) {
+    return "Deduplication: no candidates found.";
+  }
+
+  if (!apply) {
+    const lines = groups.map((g) => {
+      const ids = g.ids.split(",");
+      return (
+        `"${g.title}" (${g.category})\n` +
+        `  ${g.project_count} projects: ${g.projects}\n` +
+        `  Entry IDs: ${ids.join(", ")}`
+      );
+    });
+    return (
+      `Deduplication candidates (${groups.length}):\n\n` +
+      lines.join("\n---\n") +
+      `\n\nRun with apply_dedup=true to merge these into general knowledge.`
+    );
+  }
+
+  const updateStmt = db.prepare(
+    `UPDATE entries SET project = NULL, tags = @tags, updated_at = datetime('now') WHERE id = @id`
+  );
+  const deleteStmt = db.prepare(`DELETE FROM entries WHERE id = @id`);
+
+  let merged = 0;
+  let deleted = 0;
+
+  const transaction = db.transaction(() => {
+    for (const group of groups) {
+      const ids = group.ids.split(",").map(Number);
+
+      const entries = db
+        .prepare(
+          `SELECT id, title, content, tags, category, project, source_type, updated_at
+           FROM entries WHERE id IN (${ids.map(() => "?").join(",")})`
+        )
+        .all(...ids) as EntryRow[];
+
+      entries.sort((a, b) => {
+        const trustDiff = trustScore(b.source_type) - trustScore(a.source_type);
+        if (trustDiff !== 0) return trustDiff;
+        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      });
+      const winner = entries[0];
+
+      const allTags = new Set<string>();
+      for (const entry of entries) {
+        for (const tag of entry.tags.split(",")) {
+          const t = tag.trim().toLowerCase();
+          if (t) allTags.add(t);
+        }
+      }
+
+      updateStmt.run({ id: winner.id, tags: [...allTags].join(",") });
+      merged++;
+
+      for (const entry of entries.slice(1)) {
+        deleteStmt.run({ id: entry.id });
+        deleted++;
+      }
+    }
+  });
+
+  transaction();
+
+  return (
+    `Deduplicated ${groups.length} groups:\n` +
+    `  ${merged} entries promoted to general knowledge (preferred by trust level)\n` +
+    `  ${deleted} duplicate entries removed`
+  );
 }
