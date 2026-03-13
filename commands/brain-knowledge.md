@@ -20,7 +20,7 @@ When you discover something worth remembering, **append it to the buffer file** 
 ## After Commit — Promote from Buffer
 
 After creating a commit, review `~/.claude/pending-insights.jsonl`:
-- **Promote** entries validated by the commit → call `brain_add`
+- **Promote** entries validated by the commit → call `brain_upsert`
 - **Skip** entries unrelated to this commit → leave in buffer
 - **Discard** entries invalidated by the commit → remove from buffer
 

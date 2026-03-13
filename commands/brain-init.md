@@ -14,7 +14,7 @@ You have access to a persistent knowledge base via MCP tools.
 
 **During work:** Buffer insights to `~/.claude/pending-insights.jsonl` as JSON lines. Include: title, content, tags, category, source, source_type, project, tokens_spent, timestamp. See `/brain-knowledge` for format details.
 
-**After commit:** Review the buffer — promote entries validated by the commit via `brain_add`, skip unrelated ones, discard invalidated ones.
+**After commit:** Review the buffer — promote entries validated by the commit via `brain_upsert`, skip unrelated ones, discard invalidated ones.
 
 **What NOT to buffer:** routine fixes, things derivable from code or git, exploration that led nowhere.
 
@@ -31,7 +31,7 @@ You have access to a persistent knowledge base via MCP tools.
 1. Read the project's CLAUDE.md file (in the current working directory). If there is no project CLAUDE.md, skip to Step 3.
 2. Identify sections that contain **detailed project knowledge** — architecture deep dives, debugging tips, API quirks, specific patterns, configuration details, known gotchas. These are migration candidates.
 3. Identify sections that should **stay in CLAUDE.md** — build/run commands, coding conventions, brief project overview, file structure summaries. These are essentials that are needed almost every message.
-4. For each migration candidate, call `brain_add` with:
+4. For each migration candidate, call `brain_upsert` with:
    - A concise, searchable title
    - The full, specific content (don't summarize — preserve the detail)
    - Relevant tags (technology names, file paths, concepts)
@@ -57,4 +57,4 @@ Available commands:
 - `/brain-abandon` — dead-end session: keep general knowledge, discard impl details
 - `/exit` — consolidate knowledge (warns if buffer non-empty)
 - Use `brain_search` with `detail: "full"` to retrieve complete entry content
-- Use `brain_stats` to see entry counts, embedding coverage, and DB size
+- Use `brain_info` to see entry counts, embedding coverage, and DB size
