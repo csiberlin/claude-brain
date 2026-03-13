@@ -140,13 +140,31 @@ Embeddings are generated on `brain_add` and regenerated on `brain_update` (when 
 4. Removes legacy `@knowledge-base.md` import and `~/.claude/knowledge-base.md` if present
 5. Copies slash commands to `~/.claude/commands/`
 
+## Insight Buffer
+
+During a session, insights are buffered to `~/.claude/pending-insights.jsonl` as append-only JSON lines rather than calling `brain_add` directly. This ensures discoveries survive session end, context compaction, or `/clear` — even before a commit happens.
+
+Each buffered entry includes: `title`, `content`, `tags`, `category`, `source`, `source_type`, `project`, `tokens_spent` (approximate token cost to reach this insight), and `timestamp`.
+
+### Flush lifecycle
+
+1. **On commit (inline):** Claude reviews the buffer against the committed diff — promotes validated entries via `brain_add`, skips unrelated ones, discards invalidated ones.
+2. **`/brain-keep` (session end):** Promotes all remaining buffered entries. Runs `brain_consolidate` if 5+ entries were promoted.
+3. **`/brain-abandon` (dead-end session):** Keeps `api` and `pattern` entries (general knowledge survives), discards `map` and `decision` entries (implementation-specific). Always consolidates.
+
+The buffer is a plain file — no MCP tools or schema changes. `brain_add` remains the persistence mechanism.
+
 ## Slash Commands
 
 | Command | Purpose |
 |---|---|
 | `/brain-init` | Enable auto-knowledge behavior, migrate detailed CLAUDE.md content into the brain |
+| `/brain-knowledge` | Quick reference for knowledge workflow and buffer format |
 | `/brain-sync` | Promote stable brain entries back to CLAUDE.md |
-| `/goodbye`, `/exit` | Trigger `brain_consolidate` for end-of-session cleanup |
+| `/brain-keep` | Flush insight buffer (promote all), end session. Consolidates if 5+ promoted |
+| `/brain-abandon` | Dead-end session: keep `api`/`pattern` insights, discard `map`/`decision`, consolidate |
+| `/goodbye` | Alias for `/brain-keep` |
+| `/exit` | Consolidation only (warns if buffer is non-empty) |
 
 ## Architecture Assessment
 
