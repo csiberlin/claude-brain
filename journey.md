@@ -25,7 +25,7 @@ Together we built the first version in a single session:
 - A Node.js MCP server over stdio transport
 - SQLite database at `~/.claude/knowledge.db`
 - FTS5 full-text search (Porter stemmer, Unicode61 tokenization)
-- 7 tools: `brain_search`, `brain_add`, `brain_update`, `brain_delete`, `brain_list_tags`, `brain_consolidate`, `brain_deduplicate`
+- 7 tools: `brain_search`, `brain_add`, `brain_update`, `brain_delete`, `brain_list_tags`, `brain_consolidate`, `brain_deduplicate` (later consolidated to 5)
 - Slash commands: `/brain-init`, `/goodbye`, `/exit`
 - Automatic project detection via `git remote get-url origin`
 
@@ -305,6 +305,32 @@ This reinforced the lesson from the promotion system: **in agentic architectures
 
 ---
 
+## Tool Consolidation: 8 → 5 (March 13)
+
+After weeks of use, another token economics problem surfaced — this time not in instructions, but in the tools themselves.
+
+Every MCP tool has a Zod schema that gets serialized into the context window. Eight tools means eight schemas, each with parameter descriptions, types, and constraints. That's roughly 900 tokens of schema overhead per conversation turn — loaded every message whether the tools are used or not.
+
+The insight: several tools were semantically related and rarely used independently.
+
+### Three Merges
+
+**`brain_add` + `brain_update` → `brain_upsert`:** The distinction between "create" and "update" was an implementation detail leaking into the API. Make `id` optional — present means update, absent means add. One schema instead of two, and the calling convention is simpler: "store this knowledge" doesn't require knowing if an entry already exists.
+
+The subtle design choice: `category` has no `.default()` in the schema. For adds, the default `"pattern"` is applied in code. For updates, omitting `category` means "don't change it." A schema-level default would silently overwrite existing categories on every update.
+
+**`brain_stats` + `brain_list_tags` → `brain_info`:** Stats were always called before tags — you want the overview first, then drill into tags if something looks off. Merge them with an `include_tags` flag. Tags are opt-in to keep the default output compact.
+
+**`brain_consolidate` + `brain_deduplicate` → `brain_maintain`:** Consolidation often reveals duplicates. Having to call a separate tool to act on what you just found adds a round-trip. Merge them with a `deduplicate` flag. The consolidation logic (targeted review, full sweep counter) stays identical. Dedup appends to the output when requested.
+
+### The Result
+
+Five tools: `brain_search`, `brain_upsert`, `brain_delete`, `brain_info`, `brain_maintain`. Each merge preserved the full behavior of both originals — no functionality lost, just fewer schema tokens per turn.
+
+The pattern here echoes the token economics lesson from CLAUDE.md: **in agentic systems, every schema, every tool description, every parameter list is a tax on every message.** Fewer tools with richer parameters beats more tools with simpler parameters.
+
+---
+
 ## What I Learned About Agentic Development
 
 ### 1. The Agent is a Collaborator, Not a Tool
@@ -353,8 +379,9 @@ Claude Code's session model (ephemeral conversations, persistent files) initiall
 
 As of today (March 13, 2026), the project is:
 
-- **8 MCP tools** with hybrid FTS5 + vector search, RRF ranking, recency weighting, access tracking
+- **5 MCP tools** (consolidated from 8) with hybrid FTS5 + vector search, RRF ranking, recency weighting, access tracking
 - **7 slash commands** for initialization, knowledge reference, promotion, insight buffer flush, and session-end consolidation
+- **~900 tokens saved per turn** from tool consolidation (fewer schemas in context)
 - **4 tiered categories** with source tracking and trust hierarchy
 - **Insight buffer** (`pending-insights.jsonl`) for persisting discoveries before commit
 - **Targeted consolidation** that surfaces only what needs attention

@@ -28,7 +28,7 @@ This means a project with 50 knowledge entries pays for only the 3–5 relevant 
 Claude Code ──stdio──▶ McpServer (src/index.ts)
                          ├── initDb()         → opens SQLite, creates schema
                          ├── detectProject()  → resolves project identifier
-                         └── registerTools()  → exposes 8 MCP tools
+                         └── registerTools()  → exposes 5 MCP tools
 ```
 
 Startup is synchronous: DB init and project detection happen before the server connects to the transport. The embedding model (`all-MiniLM-L6-v2`, ONNX via `@huggingface/transformers` WASM) is lazy-loaded on first use.
@@ -45,7 +45,7 @@ entries (
   title         TEXT NOT NULL,
   content       TEXT NOT NULL,
   tags          TEXT NOT NULL DEFAULT '',    -- comma-separated, lowercase
-  category      TEXT NOT NULL DEFAULT 'general',  -- pattern|debugging|api|config|architecture|general
+  category      TEXT NOT NULL DEFAULT 'pattern',   -- map|decision|pattern|api
   project       TEXT DEFAULT NULL,           -- NULL = general knowledge
   created_at    TEXT DEFAULT datetime('now'),
   updated_at    TEXT DEFAULT datetime('now'),
@@ -109,13 +109,10 @@ If embedding generation fails (model not loaded, OOM), search degrades gracefull
 | Tool | Function | Write? |
 |---|---|---|
 | `brain_search` | Hybrid FTS5 + vector search with RRF | No |
-| `brain_add` | Insert entry + generate/store embedding | Yes |
-| `brain_update` | Partial update by ID, regenerates embedding if title/content changed | Yes |
+| `brain_upsert` | Add (omit `id`) or update (include `id`) an entry. Generates/regenerates embeddings. | Yes |
 | `brain_delete` | Delete by ID (cascades to embeddings via FK) | Yes |
-| `brain_list_tags` | Splits comma-separated tags via `json_each`, counts occurrences | No |
-| `brain_deduplicate` | Groups entries by normalized title + category across projects. Dry-run or apply (keeps most recent, merges tags, promotes to general) | Yes |
-| `brain_consolidate` | Dumps all entries grouped by category for LLM-driven review. Returns instructions for the AI to clean up using the other tools | No |
-| `brain_stats` | Entry counts, embedding coverage, project/category breakdown, DB size | No |
+| `brain_info` | Entry counts, embedding coverage, project/category breakdown, DB size. Set `include_tags=true` for tag listing with counts. | No |
+| `brain_maintain` | Targeted review of entries needing attention (stale maps, unused, low-confidence). Full sweep every 10th call. Set `deduplicate=true` for cross-project merge (dry-run by default, `apply_dedup=true` to execute). | Yes |
 
 All tool inputs are validated with Zod schemas (`src/types.ts`). Tags are normalized to lowercase on write.
 
@@ -129,7 +126,7 @@ text → buildEmbeddingText(title, content)    "Title. Content"
      → storeEmbedding() → Buffer → embeddings.embedding BLOB
 ```
 
-Embeddings are generated on `brain_add` and regenerated on `brain_update` (when title or content changes). Failures are swallowed — the entry is still persisted without a vector.
+Embeddings are generated on `brain_upsert` (new entry) and regenerated on update (when title or content changes). Failures are swallowed — the entry is still persisted without a vector.
 
 ## Installation
 
@@ -142,17 +139,17 @@ Embeddings are generated on `brain_add` and regenerated on `brain_update` (when 
 
 ## Insight Buffer
 
-During a session, insights are buffered to `~/.claude/pending-insights.jsonl` as append-only JSON lines rather than calling `brain_add` directly. This ensures discoveries survive session end, context compaction, or `/clear` — even before a commit happens.
+During a session, insights are buffered to `~/.claude/pending-insights.jsonl` as append-only JSON lines rather than calling `brain_upsert` directly. This ensures discoveries survive session end, context compaction, or `/clear` — even before a commit happens.
 
 Each buffered entry includes: `title`, `content`, `tags`, `category`, `source`, `source_type`, `project`, `tokens_spent` (approximate token cost to reach this insight), and `timestamp`.
 
 ### Flush lifecycle
 
-1. **On commit (inline):** Claude reviews the buffer against the committed diff — promotes validated entries via `brain_add`, skips unrelated ones, discards invalidated ones.
-2. **`/brain-keep` (session end):** Promotes all remaining buffered entries. Runs `brain_consolidate` if 5+ entries were promoted.
+1. **On commit (inline):** Claude reviews the buffer against the committed diff — promotes validated entries via `brain_upsert`, skips unrelated ones, discards invalidated ones.
+2. **`/brain-keep` (session end):** Promotes all remaining buffered entries. Runs `brain_maintain` if 5+ entries were promoted.
 3. **`/brain-abandon` (dead-end session):** Keeps `api` and `pattern` entries (general knowledge survives), discards `map` and `decision` entries (implementation-specific). Always consolidates.
 
-The buffer is a plain file — no MCP tools or schema changes. `brain_add` remains the persistence mechanism.
+The buffer is a plain file — no MCP tools or schema changes. `brain_upsert` remains the persistence mechanism.
 
 ## Slash Commands
 
