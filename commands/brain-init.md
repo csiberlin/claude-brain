@@ -12,16 +12,15 @@ You have access to a persistent knowledge base via MCP tools.
 
 **Before work:** Call `brain_search` to check for maps and prior knowledge about the area you're working in.
 
-**When to store knowledge:**
-- After committing: review what you learned, store maps, decisions, and patterns
-- After research: external knowledge (web, docs, MCP) is expensive to re-acquire — store it
-- At discovery: when you find a proven pattern or an anti-pattern worth warning about
+**During work:** Buffer insights to `~/.claude/pending-insights.jsonl` as JSON lines. Include: title, content, tags, category, source, source_type, project, tokens_spent, timestamp. See `/brain-knowledge` for format details.
 
-**What NOT to store:** routine fixes, things derivable from code or git, exploration that led nowhere.
+**After commit:** Review the buffer — promote entries validated by the commit via `brain_add`, skip unrelated ones, discard invalidated ones.
+
+**What NOT to buffer:** routine fixes, things derivable from code or git, exploration that led nowhere.
 
 **Tiers:** `map` (compressed file/module/API summaries), `decision` (non-obvious choices and their why), `pattern` (proven approaches and anti-patterns), `api` (external library/service knowledge from research).
 
-Use `/goodbye` or `/exit` at session end to consolidate.
+**At session end:** Use `/brain-keep` to flush insights and consolidate, or `/brain-abandon` if the session was a dead end. Use `/exit` for consolidation only.
 ```
 
 3. If `~/.claude/CLAUDE.md` contains an old `@knowledge-base.md` import line, remove it — that pattern is deprecated in favor of the inline section above.
@@ -54,6 +53,8 @@ Summarize what was done:
 Available commands:
 - `/brain-knowledge` — quick reference for when and how to store knowledge
 - `/brain-sync` — promote stable brain entries back to CLAUDE.md
-- `/goodbye` or `/exit` — consolidate knowledge at session end
+- `/brain-keep` — flush insight buffer and end session
+- `/brain-abandon` — dead-end session: keep general knowledge, discard impl details
+- `/exit` — consolidate knowledge (warns if buffer non-empty)
 - Use `brain_search` with `detail: "full"` to retrieve complete entry content
 - Use `brain_stats` to see entry counts, embedding coverage, and DB size
