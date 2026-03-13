@@ -45,8 +45,9 @@ export const DeleteSchema = z.object({
   id: z.number().describe("Entry ID to delete"),
 });
 
-export const ListTagsSchema = z.object({
-  project: z.string().optional().describe("Filter tags by project. Omit for all."),
+export const InfoSchema = z.object({
+  project: z.string().optional().describe("Filter by project. Omit for all."),
+  include_tags: z.boolean().default(false).describe("Include tag listing with counts"),
 });
 
 export const ConsolidateReviewSchema = z.object({
@@ -59,6 +60,3 @@ export const DeduplicateSchema = z.object({
   min_projects: z.number().min(2).default(2).describe("Min projects an entry must appear in to be a candidate (default 2)"),
 });
 
-export const StatsSchema = z.object({
-  project: z.string().optional().describe("Filter stats by project. Omit for all."),
-});

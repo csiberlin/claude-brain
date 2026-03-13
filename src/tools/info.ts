@@ -1,36 +1,18 @@
 import { getDb } from "../db.js";
-import { StatsSchema } from "../types.js";
+import { InfoSchema } from "../types.js";
 import { statSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import type { z } from "zod";
 
-interface CountRow {
-  count: number;
-}
+interface CountRow { count: number; }
+interface ProjectRow { project: string; count: number; }
+interface CategoryRow { category: string; count: number; }
+interface TagRow { tag: string; count: number; }
 
-interface ProjectRow {
-  project: string;
-  count: number;
-}
-
-interface CategoryRow {
-  category: string;
-  count: number;
-}
-
-interface SourceTypeRow {
-  source_type: string;
-  count: number;
-}
-
-interface TagRow {
-  tag: string;
-}
-
-export function getStats(args: z.infer<typeof StatsSchema>): string {
+export function getInfo(args: z.infer<typeof InfoSchema>): string {
   const db = getDb();
-  const { project } = args;
+  const { project, include_tags } = args;
 
   const projectFilter = project !== undefined;
   const whereClause = projectFilter
@@ -45,11 +27,9 @@ export function getStats(args: z.infer<typeof StatsSchema>): string {
 
   // Embedding coverage
   const withoutEmbeddings = (
-    db
-      .prepare(
-        `SELECT COUNT(*) as count FROM entries e LEFT JOIN embeddings emb ON e.id = emb.entry_id WHERE emb.entry_id IS NULL ${projectFilter ? "AND (e.project = @project OR e.project IS NULL)" : ""}`
-      )
-      .get(params) as CountRow
+    db.prepare(
+      `SELECT COUNT(*) as count FROM entries e LEFT JOIN embeddings emb ON e.id = emb.entry_id WHERE emb.entry_id IS NULL ${projectFilter ? "AND (e.project = @project OR e.project IS NULL)" : ""}`
+    ).get(params) as CountRow
   ).count;
   const withEmbeddings = total - withoutEmbeddings;
 
@@ -77,12 +57,6 @@ export function getStats(args: z.infer<typeof StatsSchema>): string {
     .all(params) as Array<{ source_type: string; count: number }>;
   const sourceTypesStr = sourceTypes.map((s) => `${s.source_type}(${s.count})`).join(", ");
 
-  // Unique tags
-  const tagSql = projectFilter
-    ? `SELECT DISTINCT trim(value) as tag FROM entries, json_each('["' || replace(tags, ',', '","') || '"]') WHERE tags != '' AND (project = @project OR project IS NULL)`
-    : `SELECT DISTINCT trim(value) as tag FROM entries, json_each('["' || replace(tags, ',', '","') || '"]') WHERE tags != ''`;
-  const uniqueTags = (db.prepare(tagSql).all(params) as TagRow[]).length;
-
   // DB size
   const dbPath = join(homedir(), ".claude", "knowledge.db");
   let dbSize: string;
@@ -97,23 +71,32 @@ export function getStats(args: z.infer<typeof StatsSchema>): string {
 
   // Never accessed
   const neverAccessed = (
-    db
-      .prepare(
-        `SELECT COUNT(*) as count FROM entries ${whereClause ? whereClause + " AND" : "WHERE"} access_count = 0`
-      )
-      .get(params) as CountRow
+    db.prepare(
+      `SELECT COUNT(*) as count FROM entries ${whereClause ? whereClause + " AND" : "WHERE"} access_count = 0`
+    ).get(params) as CountRow
   ).count;
 
+  // Tag query (used for both count-only and full listing)
+  const tagSql = projectFilter
+    ? `SELECT trim(value) as tag, COUNT(*) as count FROM entries, json_each('["' || replace(tags, ',', '","') || '"]') WHERE tags != '' AND (project = @project OR project IS NULL) GROUP BY trim(value) ORDER BY count DESC`
+    : `SELECT trim(value) as tag, COUNT(*) as count FROM entries, json_each('["' || replace(tags, ',', '","') || '"]') WHERE tags != '' GROUP BY trim(value) ORDER BY count DESC`;
+
+  const tagRows = db.prepare(tagSql).all(params) as TagRow[];
+
   const lines = [
-    "Knowledge Base Stats:",
+    "Knowledge Base Info:",
     `  Entries: ${total} (${withEmbeddings} with embeddings, ${withoutEmbeddings} without)`,
     `  Projects: ${projectsStr || "none"}`,
     `  Categories: ${categoriesStr || "none"}`,
     `  Source types: ${sourceTypesStr || "none"}`,
-    `  Tags: ${uniqueTags} unique`,
+    `  Tags: ${tagRows.length} unique`,
     `  DB size: ${dbSize}`,
     `  Never accessed: ${neverAccessed} entries`,
   ];
+
+  if (include_tags && tagRows.length > 0) {
+    lines.push(`  Tag details: ${tagRows.map((r) => `${r.tag}(${r.count})`).join(", ")}`);
+  }
 
   return lines.join("\n");
 }
