@@ -42,7 +42,7 @@ fi
 BRAIN_REF='
 ## Knowledge Base
 
-You have access to a persistent knowledge base via MCP tools. Use `brain_search` before starting work to check for relevant knowledge. Use `brain_add` to store insights, patterns, and solutions as you work. Use `/goodbye` or `/exit` at session end to consolidate.'
+You have access to a persistent knowledge base via MCP tools. Use `brain_search` before starting work to check for relevant knowledge. Buffer insights to `~/.claude/pending-insights.jsonl` during work — they get promoted to brain after commit or at session end. Use `/brain-keep` to end a session, or `/brain-abandon` if the session was a dead end. Use `/exit` for consolidation only.'
 
 if [ ! -f "$CLAUDE_MD" ]; then
   echo "$BRAIN_REF" > "$CLAUDE_MD"
@@ -59,7 +59,7 @@ mkdir -p "$COMMANDS_DIR"
 for cmd in "$SCRIPT_DIR"/commands/*.md; do
   cp "$cmd" "$COMMANDS_DIR/$(basename "$cmd")"
 done
-echo "Slash commands installed: /brain-init, /brain-knowledge, /brain-sync, /goodbye, /exit"
+echo "Slash commands installed: /brain-init, /brain-knowledge, /brain-sync, /brain-keep, /brain-abandon, /goodbye, /exit"
 
 echo ""
 echo "=== Done! Restart Claude Code to activate. ==="
@@ -68,7 +68,9 @@ echo "Available commands:"
 echo "  /brain-init      — Enable auto-knowledge and migrate CLAUDE.md to brain"
 echo "  /brain-knowledge — Quick reference for brain usage patterns"
 echo "  /brain-sync      — Promote stable brain entries to CLAUDE.md"
-echo "  /goodbye         — Consolidate knowledge and end session"
-echo "  /exit            — Same as /goodbye"
+echo "  /brain-keep      — Flush insight buffer and end session"
+echo "  /brain-abandon   — Dead-end session: keep general knowledge, discard impl details"
+echo "  /goodbye         — Alias for /brain-keep"
+echo "  /exit            — Consolidate knowledge (warns if buffer non-empty)"
 echo ""
 echo "Use /mcp in Claude Code to verify the server is running."
