@@ -1,14 +1,34 @@
 Quick reference for knowledge base usage patterns:
 
-## During Work — When to Store Knowledge
+## During Work — Buffer Insights
 
-**At commit time (primary):** After committing, review what you learned. Store maps of complex code you comprehended, decisions that aren't obvious from the diff, and patterns worth reusing.
+When you discover something worth remembering, **append it to the buffer file** (`~/.claude/pending-insights.jsonl`) as a single JSON line:
 
-**After research:** When you consulted external sources (web, docs, MCP tools), store the knowledge before it leaves context. External knowledge is expensive to re-acquire.
+```json
+{"title": "...", "content": "...", "tags": ["..."], "category": "map|decision|pattern|api", "source": "file.ts", "source_type": "code", "project": "owner/repo", "tokens_spent": 5000, "timestamp": "2026-03-13T10:00:00Z"}
+```
 
-**At pattern/anti-pattern discovery:** When you find something a senior dev would tell a teammate about — a trap to avoid, a technique that works well.
+**When to buffer:**
+- After research: external knowledge (web, docs, MCP) is expensive to re-acquire
+- At discovery: a proven pattern or anti-pattern worth warning about
+- When comprehending complex code: a compressed map of what you learned
 
 **Test:** "Would a future session waste significant tokens re-learning this?"
+
+**What NOT to buffer:** routine fixes, things derivable from code or git, exploration that led nowhere.
+
+## After Commit — Promote from Buffer
+
+After creating a commit, review `~/.claude/pending-insights.jsonl`:
+- **Promote** entries validated by the commit → call `brain_add`
+- **Skip** entries unrelated to this commit → leave in buffer
+- **Discard** entries invalidated by the commit → remove from buffer
+
+## At Session End
+
+- `/brain-keep` — promote all buffered insights (happy path, work was committed)
+- `/brain-abandon` — dead-end session: keeps `api`/`pattern`, discards `map`/`decision`
+- `/exit` — consolidation only (warns if buffer is non-empty)
 
 ## Tiers
 
