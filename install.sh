@@ -43,30 +43,20 @@ if [ -f "$CLAUDE_MD" ]; then
   sed -i 's/brain_add/brain_upsert/g; s/brain_update/brain_upsert/g; s/brain_list_tags/brain_info/g; s/brain_consolidate/brain_maintain/g' "$CLAUDE_MD"
 fi
 
-# Append minimal brain reference
-BRAIN_REF='
-## Knowledge Base
+# Extract Knowledge Base section from brain-init.md (single source of truth)
+BRAIN_REF=$(awk '/^```$/{ if(inside){exit} else{inside=1; next} } inside{print}' "$SCRIPT_DIR/commands/brain-init.md")
 
-You have access to a persistent knowledge base via MCP tools.
-
-**Before work:** Call `brain_search` to check for maps and prior knowledge about the area you'"'"'re working in.
-
-**During work:** Call `brain_upsert` directly when you discover something non-obvious. Entries default to `speculative` status (except `api` category, which defaults to `confirmed`). Set `confirmed: true` when the user explicitly asks to remember something.
-
-**After expensive work:** When you perform web research, multi-step API exploration, or deep code comprehension that consumed significant effort, store the results immediately via `brain_upsert` — re-acquiring this knowledge in a future session would be wasteful.
-
-**What NOT to store:** routine fixes, things derivable from code or git, exploration that led nowhere.
-
-**Tiers:** `map` (compressed file/module/API summaries), `decision` (non-obvious choices and their why), `pattern` (proven approaches and anti-patterns), `api` (external library/service knowledge from research).
-
-**At session end:** Use `/brain-keep` to promote speculative entries to confirmed, or `/brain-abandon` if the session was a dead end. Use `/exit` for consolidation only.'
-
-if [ ! -f "$CLAUDE_MD" ]; then
-  echo "$BRAIN_REF" > "$CLAUDE_MD"
-  echo "Created $CLAUDE_MD with brain reference"
+if [ -z "$BRAIN_REF" ]; then
+  echo "WARNING: Could not extract Knowledge Base section from brain-init.md"
 else
-  echo "$BRAIN_REF" >> "$CLAUDE_MD"
-  echo "Added brain reference to $CLAUDE_MD"
+  BRAIN_REF=$'\n'"$BRAIN_REF"
+  if [ ! -f "$CLAUDE_MD" ]; then
+    echo "$BRAIN_REF" > "$CLAUDE_MD"
+    echo "Created $CLAUDE_MD with brain reference"
+  else
+    echo "$BRAIN_REF" >> "$CLAUDE_MD"
+    echo "Added brain reference to $CLAUDE_MD"
+  fi
 fi
 
 echo ""
