@@ -47,7 +47,19 @@ fi
 BRAIN_REF='
 ## Knowledge Base
 
-You have access to a persistent knowledge base via MCP tools. Use `brain_search` before starting work to check for relevant knowledge. Buffer insights to `~/.claude/pending-insights.jsonl` during work — they get promoted to brain after commit or at session end. Use `/brain-keep` to end a session, or `/brain-abandon` if the session was a dead end. Use `/exit` for consolidation only.'
+You have access to a persistent knowledge base via MCP tools.
+
+**Before work:** Call `brain_search` to check for maps and prior knowledge about the area you'"'"'re working in.
+
+**During work:** Call `brain_upsert` directly when you discover something non-obvious. Entries default to `speculative` status (except `api` category, which defaults to `confirmed`). Set `confirmed: true` when the user explicitly asks to remember something.
+
+**After expensive work:** When you perform web research, multi-step API exploration, or deep code comprehension that consumed significant effort, store the results immediately via `brain_upsert` — re-acquiring this knowledge in a future session would be wasteful.
+
+**What NOT to store:** routine fixes, things derivable from code or git, exploration that led nowhere.
+
+**Tiers:** `map` (compressed file/module/API summaries), `decision` (non-obvious choices and their why), `pattern` (proven approaches and anti-patterns), `api` (external library/service knowledge from research).
+
+**At session end:** Use `/brain-keep` to promote speculative entries to confirmed, or `/brain-abandon` if the session was a dead end. Use `/exit` for consolidation only.'
 
 if [ ! -f "$CLAUDE_MD" ]; then
   echo "$BRAIN_REF" > "$CLAUDE_MD"
@@ -73,9 +85,9 @@ echo "Available commands:"
 echo "  /brain-init      — Enable auto-knowledge and migrate CLAUDE.md to brain"
 echo "  /brain-knowledge — Quick reference for brain usage patterns"
 echo "  /brain-sync      — Promote stable brain entries to CLAUDE.md"
-echo "  /brain-keep      — Flush insight buffer and end session"
-echo "  /brain-abandon   — Dead-end session: keep general knowledge, discard impl details"
+echo "  /brain-keep      — Promote speculative entries to confirmed and end session"
+echo "  /brain-abandon   — Dead-end session: delete speculative entries"
 echo "  /goodbye         — Alias for /brain-keep"
-echo "  /exit            — Consolidate knowledge (warns if buffer non-empty)"
+echo "  /exit            — Consolidate knowledge (warns if speculative entries exist)"
 echo ""
 echo "Use /mcp in Claude Code to verify the server is running."

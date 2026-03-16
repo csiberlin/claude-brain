@@ -31,15 +31,15 @@ You have access to a persistent knowledge base via MCP tools.
 
 **Before work:** Call `brain_search` to check for maps and prior knowledge about the area you're working in.
 
-**During work:** Buffer insights to `~/.claude/pending-insights.jsonl` as JSON lines. Include: title, content, tags, category, source, source_type, project, tokens_spent, timestamp. See `/brain-knowledge` for format details.
+**During work:** Call `brain_upsert` directly when you discover something non-obvious. Entries default to `speculative` status (except `api` category, which defaults to `confirmed`). Set `confirmed: true` when the user explicitly asks to remember something.
 
-**After commit:** Review the buffer — promote entries validated by the commit via `brain_upsert`, skip unrelated ones, discard invalidated ones.
+**After expensive work:** When you perform web research, multi-step API exploration, or deep code comprehension that consumed significant effort, store the results immediately via `brain_upsert` — re-acquiring this knowledge in a future session would be wasteful.
 
-**What NOT to buffer:** routine fixes, things derivable from code or git, exploration that led nowhere.
+**What NOT to store:** routine fixes, things derivable from code or git, exploration that led nowhere.
 
 **Tiers:** `map` (compressed file/module/API summaries), `decision` (non-obvious choices and their why), `pattern` (proven approaches and anti-patterns), `api` (external library/service knowledge from research).
 
-**At session end:** Use `/brain-keep` to flush insights and consolidate, or `/brain-abandon` if the session was a dead end. Use `/exit` for consolidation only.
+**At session end:** Use `/brain-keep` to promote speculative entries to confirmed, or `/brain-abandon` if the session was a dead end. Use `/exit` for consolidation only.
 ```
 
 3. If `~/.claude/CLAUDE.md` contains an old `@knowledge-base.md` import line, remove it — that pattern is deprecated in favor of the inline section above.
