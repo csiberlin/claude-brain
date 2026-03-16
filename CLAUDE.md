@@ -37,6 +37,7 @@ Detailed architecture knowledge is stored in the brain (use `brain_search` to fi
 - `/brain-init` command enables auto-knowledge with tiered categories (`map`, `decision`, `pattern`, `api`), migrates detailed project knowledge from CLAUDE.md into the brain, and slims down CLAUDE.md to essentials
 - Insights are buffered to `~/.claude/pending-insights.jsonl` during work, then promoted to brain via `brain_upsert` after commit or at session end (`/brain-keep` or `/brain-abandon`)
 - When compacting context, preserve: list of modified files, current task state, active tool names
+- **Upgrade contract:** When renaming tools, changing categories, or modifying slash commands, update `install.sh` (global cleanup) and `commands/brain-init.md` (per-project upgrade detection) so upgrades are seamless
 
 ## Journey Log (`journey.md`)
 

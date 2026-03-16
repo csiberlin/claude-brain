@@ -1,5 +1,24 @@
 Initialize the knowledge base for this project. Do the following steps:
 
+## Step 0: Upgrade detection
+
+1. Read the project's CLAUDE.md file (in the current working directory). If there is no project CLAUDE.md, skip to Step 1.
+2. Scan for **old tool names** and replace them in-place:
+   - `brain_add` → `brain_upsert`
+   - `brain_update` → `brain_upsert`
+   - `brain_list_tags` → `brain_info`
+   - `brain_consolidate` → `brain_maintain`
+3. Scan for **old category names** and replace them in-place:
+   - `debugging` → `pattern`
+   - `config` → `decision`
+   - `architecture` → `map`
+   - `general` → `pattern`
+   (Only replace these when they appear as brain/knowledge-base category values, not as general English words.)
+4. Scan for **old slash command references** and update them:
+   - References to `/goodbye` should note it is now an alias for `/brain-keep`
+   - References to `/brain-sync` remain valid
+5. Report what was upgraded in the final summary (Step 3).
+
 ## Step 1: Enable automatic brain usage
 
 1. Read `~/.claude/CLAUDE.md`. If it doesn't exist, create it.

@@ -23,9 +23,9 @@ CLAUDE_DIR="$HOME/.claude"
 mkdir -p "$CLAUDE_DIR"
 CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
 
-# Remove old @import if present
+# Remove old @import if present (handle Windows \r\n line endings)
 if [ -f "$CLAUDE_MD" ]; then
-  grep -v '@knowledge-base\.md' "$CLAUDE_MD" > "$CLAUDE_MD.tmp" && mv "$CLAUDE_MD.tmp" "$CLAUDE_MD"
+  sed -i '/^@knowledge-base\.md/d' "$CLAUDE_MD"
 fi
 
 # Remove old knowledge-base.md file if present
@@ -36,6 +36,11 @@ if [ -f "$CLAUDE_MD" ] && grep -qF "## Knowledge Base" "$CLAUDE_MD"; then
   # Remove from "## Knowledge Base" to next "##" heading or end of file
   awk '/^## Knowledge Base/{skip=1; next} /^## /{skip=0} !skip' "$CLAUDE_MD" > "$CLAUDE_MD.tmp" && mv "$CLAUDE_MD.tmp" "$CLAUDE_MD"
   echo "Removed old Knowledge Base section from $CLAUDE_MD"
+fi
+
+# Replace old tool names in any remaining content (user may reference them outside the Knowledge Base section)
+if [ -f "$CLAUDE_MD" ]; then
+  sed -i 's/brain_add/brain_upsert/g; s/brain_update/brain_upsert/g; s/brain_list_tags/brain_info/g; s/brain_consolidate/brain_maintain/g' "$CLAUDE_MD"
 fi
 
 # Append minimal brain reference
