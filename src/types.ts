@@ -26,7 +26,7 @@ export const SearchSchema = z.object({
   query: z.string().describe("Search terms: technical terms, library names, error messages, concepts"),
   project: z.string().optional().describe("Project identifier to scope results. Omit for all."),
   category: z.enum(categories).optional().describe("Filter by category"),
-  limit: z.number().min(1).max(20).default(5).describe("Max results (default 5)"),
+  limit: z.number().min(1).max(5).default(5).describe("Max results (default 5)"),
   detail: z.enum(["brief", "full"]).default("brief").describe("'brief' returns snippets (default), 'full' returns complete content"),
 });
 
