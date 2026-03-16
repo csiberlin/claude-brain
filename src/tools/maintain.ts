@@ -133,6 +133,21 @@ function targetedReview(
     }
   }
 
+  // Orphaned speculative entries (never promoted, session likely ended without /brain-keep)
+  const orphanedSpeculative = db.prepare(`
+    SELECT * FROM entries e
+    ${whereBase ? whereBase + " AND" : "WHERE"}
+    e.status = 'speculative'
+    AND e.created_at < datetime('now', '-3 days')
+    ORDER BY e.created_at ASC
+  `).all(params) as Entry[];
+
+  for (const e of orphanedSpeculative) {
+    if (!candidates.some(c => c.entry.id === e.id)) {
+      candidates.push({ entry: e, reason: "Orphaned speculative (>3 days, never promoted)" });
+    }
+  }
+
   if (candidates.length === 0) {
     return `Targeted review (${untilFull}/10 until full review): no items need attention.`;
   }

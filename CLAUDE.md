@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-An MCP server providing a local SQLite-based knowledge base for Claude Code. Exposes 5 tools (`brain_search`, `brain_upsert`, `brain_delete`, `brain_info`, `brain_maintain`) over stdio transport. Database lives at `~/.claude/knowledge.db` with FTS5 full-text search and semantic vector search (hybrid ranking via Reciprocal Rank Fusion). Includes slash commands: `/brain-init` (enable auto-knowledge + migrate CLAUDE.md to brain), `/brain-keep` (flush insight buffer + end session), `/brain-abandon` (dead-end session cleanup), `/exit` (consolidation only), `/goodbye` (alias for `/brain-keep`).
+An MCP server providing a local SQLite-based knowledge base for Claude Code. Exposes 5 tools (`brain_search`, `brain_upsert`, `brain_delete`, `brain_info`, `brain_maintain`) over stdio transport. Database lives at `~/.claude/knowledge.db` with FTS5 full-text search and semantic vector search (hybrid ranking via Reciprocal Rank Fusion). Entries have a `status` field: `speculative` (default for map/decision/pattern) or `confirmed` (default for api, also set by explicit user request or `/brain-keep`). Includes slash commands: `/brain-init` (enable auto-knowledge + migrate CLAUDE.md to brain), `/brain-keep` (promote speculative to confirmed + end session), `/brain-abandon` (delete speculative entries from dead-end session), `/exit` (consolidation only), `/goodbye` (alias for `/brain-keep`).
 
 ## Build & Run
 
@@ -35,7 +35,7 @@ Detailed architecture knowledge is stored in the brain (use `brain_search` to fi
 - TypeScript strict mode, target ES2022, module Node16
 - Install script registers MCP server and installs slash commands to `~/.claude/commands/`
 - `/brain-init` command enables auto-knowledge with tiered categories (`map`, `decision`, `pattern`, `api`), migrates detailed project knowledge from CLAUDE.md into the brain, and slims down CLAUDE.md to essentials
-- Insights are buffered to `~/.claude/pending-insights.jsonl` during work, then promoted to brain via `brain_upsert` after commit or at session end (`/brain-keep` or `/brain-abandon`)
+- Insights are stored directly via `brain_upsert` as `speculative` (or `confirmed` for api category). `/brain-keep` promotes speculative to confirmed; `/brain-abandon` deletes speculative entries
 - When compacting context, preserve: list of modified files, current task state, active tool names
 - **Upgrade contract:** When renaming tools, changing categories, or modifying slash commands, update `install.sh` (global cleanup) and `commands/brain-init.md` (per-project upgrade detection) so upgrades are seamless
 

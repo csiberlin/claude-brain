@@ -49,6 +49,14 @@ export function getInfo(args: z.infer<typeof InfoSchema>): string {
     .all(params) as CategoryRow[];
   const categoriesStr = categories.map((c) => `${c.category}(${c.count})`).join(", ");
 
+  // Status breakdown
+  const statuses = db
+    .prepare(
+      `SELECT status, COUNT(*) as count FROM entries ${whereClause} GROUP BY status ORDER BY count DESC`
+    )
+    .all(params) as Array<{ status: string; count: number }>;
+  const statusStr = statuses.map((s) => `${s.status}(${s.count})`).join(", ");
+
   // Source type breakdown
   const sourceTypes = db
     .prepare(
@@ -88,6 +96,7 @@ export function getInfo(args: z.infer<typeof InfoSchema>): string {
     `  Entries: ${total} (${withEmbeddings} with embeddings, ${withoutEmbeddings} without)`,
     `  Projects: ${projectsStr || "none"}`,
     `  Categories: ${categoriesStr || "none"}`,
+    `  Status: ${statusStr || "none"}`,
     `  Source types: ${sourceTypesStr || "none"}`,
     `  Tags: ${tagRows.length} unique`,
     `  DB size: ${dbSize}`,

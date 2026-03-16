@@ -86,6 +86,10 @@ export function initDb(): void {
   if (!colNames.has("source_type")) {
     db.exec("ALTER TABLE entries ADD COLUMN source_type TEXT DEFAULT NULL");
   }
+  if (!colNames.has("status")) {
+    db.exec("ALTER TABLE entries ADD COLUMN status TEXT NOT NULL DEFAULT 'confirmed'");
+    // Existing entries are confirmed (they predate speculative workflow)
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS metadata (

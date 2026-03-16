@@ -15,6 +15,13 @@ export async function upsertKnowledge(
   return id !== undefined ? updateEntry(id, args) : addEntry(args);
 }
 
+function resolveStatus(args: z.infer<typeof UpsertSchema>): string {
+  if (args.confirmed === true) return "confirmed";
+  if (args.confirmed === false) return "speculative";
+  // Default: api category is confirmed, everything else is speculative
+  return (args.category ?? "pattern") === "api" ? "confirmed" : "speculative";
+}
+
 async function addEntry(
   args: z.infer<typeof UpsertSchema>
 ): Promise<string> {
@@ -33,10 +40,12 @@ async function addEntry(
     .filter(Boolean)
     .join(",");
 
+  const status = resolveStatus(args);
+
   const result = db
     .prepare(
-      `INSERT INTO entries (title, content, tags, category, project, source, source_type)
-       VALUES (@title, @content, @tags, @category, @project, @source, @source_type)`
+      `INSERT INTO entries (title, content, tags, category, project, source, source_type, status)
+       VALUES (@title, @content, @tags, @category, @project, @source, @source_type, @status)`
     )
     .run({
       title,
@@ -46,6 +55,7 @@ async function addEntry(
       project: project ?? null,
       source: source ?? null,
       source_type: source_type ?? null,
+      status,
     });
 
   const entryId = result.lastInsertRowid as number;
@@ -57,7 +67,7 @@ async function addEntry(
     // Embedding generation failed — entry is still saved
   }
 
-  return `Added entry [${entryId}]: ${title}`;
+  return `Added ${status} entry [${entryId}]: ${title}`;
 }
 
 async function updateEntry(
@@ -97,6 +107,11 @@ async function updateEntry(
   if (source_type !== undefined) {
     sets.push("source_type = @source_type");
     params.source_type = source_type;
+  }
+
+  // Status: only upgrade (speculative -> confirmed), never downgrade
+  if (args.confirmed === true) {
+    sets.push("status = 'confirmed'");
   }
 
   if (sets.length === 1) {

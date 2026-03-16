@@ -13,6 +13,7 @@ interface SearchResult {
   tags: string;
   category: string;
   project: string | null;
+  status: string;
   content_snippet: string;
   updated_at: string;
   source: string | null;
@@ -25,6 +26,7 @@ interface EntryRow {
   tags: string;
   category: string;
   project: string | null;
+  status: string;
   content: string;
   updated_at: string;
   source: string | null;
@@ -37,11 +39,15 @@ function recencyBoost(updatedAt: string): number {
   return 1 / (1 + days / 365);
 }
 
+function statusBoost(status: string): number {
+  return status === "confirmed" ? 1.15 : 1.0;
+}
+
 export async function searchKnowledge(
   args: z.infer<typeof SearchSchema>
 ): Promise<string> {
   const db = getDb();
-  const { query, project, category, limit, detail } = args;
+  const { query, project, category, status, limit, detail } = args;
   const isFull = detail === "full";
 
   // Escape FTS5 special characters and build query
@@ -70,12 +76,17 @@ export async function searchKnowledge(
     params.category = category;
   }
 
+  if (status !== undefined) {
+    conditions.push("e.status = @status");
+    params.status = status;
+  }
+
   const contentExpr = isFull
     ? "e.content as content_snippet"
     : "snippet(entries_fts, 1, '>>>', '<<<', '...', 40) as content_snippet";
 
   const ftsSql = `
-    SELECT e.id, e.title, e.tags, e.category, e.project, e.updated_at, e.source, e.source_type,
+    SELECT e.id, e.title, e.tags, e.category, e.project, e.status, e.updated_at, e.source, e.source_type,
            ${contentExpr}
     FROM entries_fts
     JOIN entries e ON e.id = entries_fts.rowid
@@ -102,10 +113,10 @@ export async function searchKnowledge(
   const K = 60;
 
   if (vectorRankedIds.length === 0) {
-    // No vector results — combine FTS rank with recency and return
+    // No vector results — combine FTS rank with recency and status boost
     const scored = ftsResults.map((r, i) => ({
       result: r,
-      score: (1 / (K + i)) * recencyBoost(r.updated_at),
+      score: (1 / (K + i)) * recencyBoost(r.updated_at) * statusBoost(r.status),
     }));
     scored.sort((a, b) => b.score - a.score);
     const trimmed = scored.slice(0, limit).map((s) => s.result);
@@ -142,7 +153,7 @@ export async function searchKnowledge(
     const contentCol = isFull ? "content" : "substr(content, 1, 200) as content";
     const rows = db
       .prepare(
-        `SELECT id, title, tags, category, project, updated_at, source, source_type, ${contentCol}
+        `SELECT id, title, tags, category, project, status, updated_at, source, source_type, ${contentCol}
          FROM entries WHERE id IN (${placeholders})`
       )
       .all(...vectorOnlyIds) as EntryRow[];
@@ -153,6 +164,7 @@ export async function searchKnowledge(
         tags: row.tags,
         category: row.category,
         project: row.project,
+        status: row.status,
         content_snippet: row.content,
         updated_at: row.updated_at,
         source: row.source,
@@ -161,11 +173,11 @@ export async function searchKnowledge(
     }
   }
 
-  // Apply recency boost to RRF scores
+  // Apply recency and status boosts to RRF scores
   for (const [id, score] of scores) {
     const entry = ftsById.get(id);
-    if (entry?.updated_at) {
-      scores.set(id, score * recencyBoost(entry.updated_at));
+    if (entry) {
+      scores.set(id, score * recencyBoost(entry.updated_at) * statusBoost(entry.status));
     }
   }
 
@@ -204,7 +216,7 @@ function formatResults(results: SearchResult[]): string {
     results
       .map(
         (r) =>
-          `[${r.id}] ${r.title} (${r.category}${r.project ? ", " + r.project : ""}${r.source_type ? ", " + r.source_type : ""})\n` +
+          `[${r.id}] ${r.title} (${r.category}${r.status === "speculative" ? ", speculative" : ""}${r.project ? ", " + r.project : ""}${r.source_type ? ", " + r.source_type : ""})\n` +
           `Tags: ${r.tags}${r.source ? " | Source: " + r.source : ""}\n` +
           `${r.content_snippet}`
       )

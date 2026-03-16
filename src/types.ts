@@ -4,6 +4,9 @@ export const categories = ["map", "decision", "pattern", "api"] as const;
 
 export type Category = (typeof categories)[number];
 
+export const entryStatuses = ["speculative", "confirmed"] as const;
+export type EntryStatus = (typeof entryStatuses)[number];
+
 export const sourceTypes = ["docs", "code", "verified", "research", "inferred"] as const;
 export type SourceType = (typeof sourceTypes)[number];
 
@@ -16,6 +19,7 @@ export interface Entry {
   project: string | null;
   source: string | null;
   source_type: SourceType | null;
+  status: EntryStatus;
   created_at: string;
   updated_at: string;
   last_accessed: string | null;
@@ -26,6 +30,7 @@ export const SearchSchema = z.object({
   query: z.string().describe("Search terms: technical terms, library names, error messages, concepts"),
   project: z.string().optional().describe("Project identifier to scope results. Omit for all."),
   category: z.enum(categories).optional().describe("Filter by category"),
+  status: z.enum(entryStatuses).optional().describe("Filter by status: speculative or confirmed. Omit for all."),
   limit: z.number().min(1).max(5).default(5).describe("Max results (default 5)"),
   detail: z.enum(["brief", "full"]).default("brief").describe("'brief' returns snippets (default), 'full' returns complete content"),
 });
@@ -39,6 +44,7 @@ export const UpsertSchema = z.object({
   project: z.string().nullable().optional().describe("Project identifier. Omit for auto-detect, null for general."),
   source: z.string().nullable().optional().describe("Where this knowledge comes from"),
   source_type: z.enum(sourceTypes).nullable().optional().describe("Trust level: docs, code, verified, research, inferred"),
+  confirmed: z.boolean().optional().describe("Set true to force confirmed status. Default: confirmed for 'api' category, speculative for others."),
 });
 
 export const DeleteSchema = z.object({

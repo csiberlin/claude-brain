@@ -25,7 +25,7 @@ export function registerTools(server: McpServer): void {
 
   server.tool(
     "brain_upsert",
-    "Add or update a knowledge entry. Omit id to create, include id to update.",
+    "Add or update a knowledge entry. Omit id to create, include id to update. New entries default to speculative (confirmed for api category). Set confirmed=true to override.",
     UpsertSchema.shape,
     async (args) => {
       const parsed = UpsertSchema.parse(args);

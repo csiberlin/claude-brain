@@ -1,34 +1,32 @@
 Quick reference for knowledge base usage patterns:
 
-## During Work — Buffer Insights
+## During Work — Store Insights Directly
 
-When you discover something worth remembering, **append it to the buffer file** (`~/.claude/pending-insights.jsonl`) as a single JSON line:
+When you discover something worth remembering, call `brain_upsert` immediately. Entries default to **speculative** status (except `api` category, which defaults to **confirmed**).
 
-```json
-{"title": "...", "content": "...", "tags": ["..."], "category": "map|decision|pattern|api", "source": "file.ts", "source_type": "code", "project": "owner/repo", "tokens_spent": 5000, "timestamp": "2026-03-13T10:00:00Z"}
-```
-
-**When to buffer:**
+**When to store:**
 - After research: external knowledge (web, docs, MCP) is expensive to re-acquire
 - At discovery: a proven pattern or anti-pattern worth warning about
 - When comprehending complex code: a compressed map of what you learned
 
 **Test:** "Would a future session waste significant tokens re-learning this?"
 
-**What NOT to buffer:** routine fixes, things derivable from code or git, exploration that led nowhere.
+**What NOT to store:** routine fixes, things derivable from code or git, exploration that led nowhere.
 
-## After Commit — Promote from Buffer
+## Speculative vs Confirmed
 
-After creating a commit, review `~/.claude/pending-insights.jsonl`:
-- **Promote** entries validated by the commit → call `brain_upsert`
-- **Skip** entries unrelated to this commit → leave in buffer
-- **Discard** entries invalidated by the commit → remove from buffer
+| Status | Meaning | Default for |
+|--------|---------|-------------|
+| `speculative` | Working hypothesis, tied to current approach | `map`, `decision`, `pattern` |
+| `confirmed` | Validated knowledge, survives session abandonment | `api` (also: explicit user requests, `/brain-init` migrations) |
+
+Use `confirmed: true` parameter to override the default when the user explicitly asks to store something.
 
 ## At Session End
 
-- `/brain-keep` — promote all buffered insights (happy path, work was committed)
-- `/brain-abandon` — dead-end session: keeps `api`/`pattern`, discards `map`/`decision`
-- `/exit` — consolidation only (warns if buffer is non-empty)
+- `/brain-keep` — promote all speculative entries to confirmed (happy path, work was committed)
+- `/brain-abandon` — dead-end session: delete speculative entries, confirmed entries survive
+- `/exit` — consolidation only (warns if speculative entries exist)
 
 ## Tiers
 
