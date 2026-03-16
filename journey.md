@@ -297,11 +297,13 @@ The commands went through a quick evolution:
 
 The naming tells you everything: *keep* your insights, or *abandon* the dead-end approach (but still keep what you learned about the world).
 
-### No Code Changes
+### No Code Changes (At The Time)
 
-The entire feature is implemented as slash commands and conventions — zero MCP tools added, zero schema changes, zero TypeScript modified. The buffer is a plain file that Claude reads and writes directly. `brain_add` is still the only way knowledge enters the database.
+The entire feature was implemented as slash commands and conventions — zero MCP tools added, zero schema changes, zero TypeScript modified. The buffer was a plain file that Claude was instructed to read and write directly. `brain_add` was still the only way knowledge entered the database.
 
 This reinforced the lesson from the promotion system: **in agentic architectures, the prompt IS the feature.** Sometimes the right abstraction isn't a new tool — it's better instructions for the existing ones.
+
+*Author's note: This turned out to be the feature's fatal flaw. See "When the Design Doesn't Survive Contact With Reality" below.*
 
 ---
 
@@ -328,6 +330,63 @@ The subtle design choice: `category` has no `.default()` in the schema. For adds
 Five tools: `brain_search`, `brain_upsert`, `brain_delete`, `brain_info`, `brain_maintain`. Each merge preserved the full behavior of both originals — no functionality lost, just fewer schema tokens per turn.
 
 The pattern here echoes the token economics lesson from CLAUDE.md: **in agentic systems, every schema, every tool description, every parameter list is a tax on every message.** Fewer tools with richer parameters beats more tools with simpler parameters.
+
+---
+
+## When the Design Doesn't Survive Contact With Reality (March 16)
+
+Three days after designing the insight buffer, I was working in a completely different project (GxReport) and noticed something: the brain wasn't capturing anything. No insights were being stored between sessions. The `pending-insights.jsonl` file didn't even exist.
+
+I asked Claude to investigate. The answer was humbling.
+
+### The Buffer Was a Fiction
+
+The entire JSONL buffer mechanism — the one I'd designed with such care, with its category-based triage and `tokens_spent` tracking and two flush paths — relied on one assumption: **that Claude would proactively write to a file during normal work.**
+
+It never did. Claude only takes actions in response to user messages. There's no background process. The MCP server has no awareness of the conversation. Nobody triggers the insight capture. The buffer was always empty.
+
+This was a design that looked elegant on paper but failed the most basic test: does the tool actually get used? The insight buffer was a prompt instruction masquerading as a feature. And prompt instructions that ask Claude to self-initiate side effects during work simply don't work reliably.
+
+### The Lesson: Prompt-Driven Features Have Limits
+
+In the previous section, I wrote: *"in agentic architectures, the prompt IS the feature."* The buffer experience added a crucial qualifier: **prompts work for reactive behavior, not proactive behavior.**
+
+The promotion system (`/brain-sync`) works because it's triggered by a user command — Claude reacts. The consolidation in `/goodbye` works because the user invokes it. But "while working, also write insights to a file" is asking Claude to multitask on its own initiative. The agent doesn't have initiative. It responds.
+
+This distinction matters beyond this project. Any agentic feature that depends on the AI "remembering to do something in the background" will fail silently. The feature has to be on the execution path, not alongside it.
+
+### The Fix: Speculative/Confirmed Status
+
+Instead of a two-stage buffer, I added a `status` field directly to the database:
+
+- **`speculative`** — default for `map`, `decision`, `pattern` entries. Working hypothesis.
+- **`confirmed`** — default for `api` entries (external knowledge is true regardless of your code). Also set by explicit user request.
+
+Now `brain_upsert` is the only storage mechanism — a real MCP tool call that actually happens. No intermediate file. The epistemic distinction that the buffer was supposed to provide (tentative vs. validated) lives in the database itself.
+
+The session-end commands became simpler:
+- `/brain-keep` promotes speculative -> confirmed
+- `/brain-abandon` deletes speculative entries (confirmed survive)
+
+The key design insight: **category already encodes confidence.** API knowledge researched from docs is confident regardless of your implementation. A map of code you're about to revert is inherently speculative. By defaulting status based on category, the system gets it right most of the time without Claude needing to think about it.
+
+### Also: install.sh Had Its Own Copy
+
+While fixing this, I discovered that `install.sh` maintained its own hardcoded version of the Knowledge Base instructions that it wrote to `~/.claude/CLAUDE.md`. When I updated the instructions to remove the buffer references, `install.sh` still had the old text. Running `./install.sh` after the fix reverted my changes.
+
+The fix: `install.sh` now extracts the Knowledge Base section from `commands/brain-init.md` via awk. Single source of truth. No more drift between the install script and the actual instructions.
+
+**Lesson:** When the same content exists in two places, they will diverge. This is true for code, and it's true for prompt instructions too.
+
+### What This Means for Agentic Architecture
+
+The failed buffer taught me three things:
+
+1. **Test your assumptions about agent behavior.** I assumed Claude would write files proactively. I never tested it. Three weeks of "working" buffer and nothing was ever buffered.
+
+2. **Make features use real tool calls.** `brain_upsert` works because it's an MCP tool. Writing to a JSONL file fails because it's a behavioral instruction. The difference: tool calls are in the execution path; behavioral instructions are aspirational.
+
+3. **Improvements can make things worse.** The buffer was meant to improve on direct `brain_upsert` calls by adding a safety net. Instead, it replaced something that worked (Claude occasionally calling `brain_upsert` when prompted) with something that never worked (Claude proactively writing to a file). Sometimes the "better" design is the one that doesn't ship.
 
 ---
 
@@ -373,22 +432,30 @@ YAGNI isn't laziness. It's discipline.
 
 Claude Code's session model (ephemeral conversations, persistent files) initially felt like a limitation. Then I realized: the session boundary is a natural checkpoint. `/goodbye` triggers consolidation. Commit time triggers knowledge capture. The constraints shape the workflow.
 
+### 7. Test Your Assumptions About Agent Behavior
+
+The insight buffer taught me the hardest lesson: I designed a feature assuming Claude would proactively write to a file during work. It never did. Three weeks of "working" buffer, nothing buffered. The assumption was never tested because the failure was silent — no errors, no warnings, just an empty file nobody checked.
+
+In agentic development, you can't assume the agent will do something just because you told it to. Reactive behavior (respond to commands) works. Proactive behavior (do this in the background while working) doesn't. Design accordingly.
+
+### 8. Improvements Can Make Things Worse
+
+The buffer was meant to improve on direct `brain_upsert` by adding a safety net for dead-end sessions. Instead, it replaced something that occasionally worked with something that never worked. The "better" design had zero adoption because it required behavior the agent couldn't perform. Sometimes shipping the simpler, less elegant solution is the right call.
+
 ---
 
 ## The Current State
 
-As of today (March 13, 2026), the project is:
+As of today (March 16, 2026), the project is:
 
-- **5 MCP tools** (consolidated from 8) with hybrid FTS5 + vector search, RRF ranking, recency weighting, access tracking
-- **7 slash commands** for initialization, knowledge reference, promotion, insight buffer flush, and session-end consolidation
+- **5 MCP tools** (consolidated from 8) with hybrid FTS5 + vector search, RRF ranking, recency weighting, status boost, access tracking
+- **7 slash commands** for initialization, knowledge reference, promotion, speculative entry management, and session-end consolidation
 - **~900 tokens saved per turn** from tool consolidation (fewer schemas in context)
 - **4 tiered categories** with source tracking and trust hierarchy
-- **Insight buffer** (`pending-insights.jsonl`) for persisting discoveries before commit
-- **Targeted consolidation** that surfaces only what needs attention
-- **~650 tokens saved per message** vs. the original design
+- **Speculative/confirmed status** on entries — category-based defaults, promotion via `/brain-keep`, cleanup via `/brain-abandon`
+- **Targeted consolidation** that surfaces stale maps, unused entries, low-confidence items, and orphaned speculative entries
+- **Single source of truth** — `brain-init.md` owns the Knowledge Base instructions, `install.sh` extracts them
 - **Zero external dependencies** beyond Node.js and SQLite
-
-The brain currently holds 6 entries for this project — maps of the architecture, database schema, search system, embeddings, project detection, and type system. Each one is 10-20x smaller than the source file it summarizes.
 
 ---
 
@@ -411,6 +478,6 @@ That was the whole point.
 
 Every commit in this project is `Co-Authored-By: Claude Opus 4.6`. That's not a formality — it's accurate. This project was built in conversation, with a partner who could write the code but needed me to know *what* to build and *why*.
 
-The journey from "Claude forgets everything" to a working knowledge system took 20 days. The intellectual journey — from "store everything" to "store what matters," from eager capture to intent-driven knowledge, from flat categories to trust-weighted tiers — that's the real work. And it's ongoing.
+The journey from "Claude forgets everything" to a working knowledge system took 20 days. The intellectual journey — from "store everything" to "store what matters," from eager capture to intent-driven knowledge, from flat categories to trust-weighted tiers, from a buffer that never worked to a status model that does — that's the real work. And it's ongoing.
 
 *— Built in conversation, one session at a time.*

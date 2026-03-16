@@ -13,7 +13,7 @@ The two-tier model:
 1. **CLAUDE.md** — minimal: build commands, file structure summary, conventions. Loaded every message, so kept small.
 2. **Brain (this server)** — everything else: architecture details, debugging notes, API quirks, patterns. Retrieved only when `brain_search` is called.
 
-This means a project with 50 knowledge entries pays for only the 3–5 relevant snippets returned by a search, not all 50 on every turn. The `/brain-init` command automates this migration: it moves detailed content from CLAUDE.md into the brain and slims the file to essentials. Search results are further compressed via FTS5 `snippet()` (40-token excerpts) rather than returning full entry content.
+This means a project with 50 knowledge entries pays for only the 3-5 relevant snippets returned by a search, not all 50 on every turn. The `/brain-init` command automates this migration: it moves detailed content from CLAUDE.md into the brain and slims the file to essentials. Search results are further compressed via FTS5 `snippet()` (40-token excerpts) rather than returning full entry content.
 
 ### Key Thresholds
 
@@ -25,10 +25,10 @@ This means a project with 50 knowledge entries pays for only the 3–5 relevant 
 ## Runtime
 
 ```
-Claude Code ──stdio──▶ McpServer (src/index.ts)
-                         ├── initDb()         → opens SQLite, creates schema
-                         ├── detectProject()  → resolves project identifier
-                         └── registerTools()  → exposes 5 MCP tools
+Claude Code --stdio--> McpServer (src/index.ts)
+                         |-- initDb()         -> opens SQLite, creates schema
+                         |-- detectProject()  -> resolves project identifier
+                         +-- registerTools()  -> exposes 5 MCP tools
 ```
 
 Startup is synchronous: DB init and project detection happen before the server connects to the transport. The embedding model (`all-MiniLM-L6-v2`, ONNX via `@huggingface/transformers` WASM) is lazy-loaded on first use.
@@ -47,6 +47,9 @@ entries (
   tags          TEXT NOT NULL DEFAULT '',    -- comma-separated, lowercase
   category      TEXT NOT NULL DEFAULT 'pattern',   -- map|decision|pattern|api
   project       TEXT DEFAULT NULL,           -- NULL = general knowledge
+  source        TEXT DEFAULT NULL,           -- URL, file path, library name
+  source_type   TEXT DEFAULT NULL,           -- docs|code|verified|research|inferred
+  status        TEXT NOT NULL DEFAULT 'confirmed', -- speculative|confirmed
   created_at    TEXT DEFAULT datetime('now'),
   updated_at    TEXT DEFAULT datetime('now'),
   last_accessed TEXT DEFAULT NULL,           -- set on brain_search hit
@@ -57,7 +60,7 @@ entries_fts  -- FTS5 virtual table (porter + unicode61 tokenizer)
              -- content-synced with entries via INSERT/UPDATE/DELETE triggers
 
 embeddings (
-  entry_id    INTEGER PRIMARY KEY → entries(id) ON DELETE CASCADE,
+  entry_id    INTEGER PRIMARY KEY -> entries(id) ON DELETE CASCADE,
   embedding   BLOB NOT NULL,       -- Float32Array serialized to Buffer
   model       TEXT NOT NULL,       -- e.g. "Xenova/all-MiniLM-L6-v2"
   created_at  TEXT
@@ -66,11 +69,38 @@ embeddings (
 
 FTS5 is kept in sync automatically via three triggers (`entries_ai`, `entries_ad`, `entries_au`) that mirror inserts, deletes, and updates into the `entries_fts` virtual table.
 
+## Speculative/Confirmed Status
+
+Entries have a `status` field that tracks their epistemic confidence:
+
+- **`speculative`** — working hypothesis, tied to the current implementation approach. Default for `map`, `decision`, and `pattern` categories.
+- **`confirmed`** — validated knowledge that survives session abandonment. Default for `api` category (external knowledge is true regardless of whether your code worked). Also set by explicit user requests, `/brain-init` migrations, and `/brain-keep` promotion.
+
+### Why This Exists
+
+The original design used a JSONL buffer file (`~/.claude/pending-insights.jsonl`) as an intermediate staging area. Insights were supposed to be written to this file during work, then promoted to the database at commit time or session end. **This never worked** — the MCP server has no access to the conversation, and Claude doesn't proactively write to files mid-conversation. The buffer was always empty.
+
+The speculative/confirmed model solves this by making `brain_upsert` the immediate storage mechanism (a real MCP tool call that actually happens) while preserving the ability to distinguish tentative from validated knowledge.
+
+### Lifecycle
+
+1. **During work:** Claude calls `brain_upsert` directly. Status defaults by category (`api` -> confirmed, others -> speculative).
+2. **`/brain-keep` (happy path):** Promotes all speculative entries for the project to confirmed.
+3. **`/brain-abandon` (dead end):** Deletes speculative entries. Confirmed entries (including api, which was confirmed from the start) survive.
+4. **`brain_maintain`:** Flags orphaned speculative entries (>3 days old, never promoted) as needing attention.
+
+### Design Rules
+
+- `confirmed: true` parameter on `brain_upsert` overrides the category default (for explicit user requests).
+- Updates never downgrade: updating a confirmed entry doesn't reset it to speculative.
+- Search returns both statuses but applies a 15% ranking boost to confirmed entries.
+- The `install.sh` script extracts the Knowledge Base section from `commands/brain-init.md` (single source of truth) rather than maintaining its own copy.
+
 ## Project Scoping
 
 `src/project.ts` resolves the current project identifier at startup:
 
-1. Try `git remote get-url origin` → extract `owner/repo` from the URL
+1. Try `git remote get-url origin` -> extract `owner/repo` from the URL
 2. Fallback: use the working directory's basename
 
 All tools that accept a `project` parameter auto-fill it from the detected value when omitted. Searches include both project-scoped and general (`project IS NULL`) entries.
@@ -81,7 +111,7 @@ All tools that accept a `project` parameter auto-fill it from the detected value
 
 ### 1. FTS5 Pass
 - Query terms are OR'd, each quoted for literal matching
-- Joins `entries_fts` with `entries`, applies project/category filters
+- Joins `entries_fts` with `entries`, applies project/category/status filters
 - Returns up to `limit * 3` results ranked by FTS5's BM25-based `rank`
 - Uses `snippet()` for content excerpts (40-token window)
 
@@ -94,11 +124,13 @@ All tools that accept a `project` parameter auto-fill it from the detected value
 ### 3. Reciprocal Rank Fusion (K=60)
 Merges both ranked lists:
 ```
-score(entry) = Σ  1 / (K + rank_in_list)
+score(entry) = SUM  1 / (K + rank_in_list)
 ```
 For entries appearing in both lists, scores accumulate. Final results are sorted by RRF score descending, trimmed to `limit`.
 
-RRF scores are then multiplied by a recency boost: `1 / (1 + days_since_update / 365)`. This gently favors recent entries (1-day-old: ~1.0x, 1-year-old: ~0.5x) without burying old knowledge.
+RRF scores are then multiplied by a recency boost and a status boost:
+- **Recency:** `1 / (1 + days_since_update / 365)` — gently favors recent entries (1-day-old: ~1.0x, 1-year-old: ~0.5x)
+- **Status:** confirmed entries get a 1.15x boost over speculative entries
 
 Vector-only hits (no FTS match) are back-filled from the `entries` table with a `substr(content, 1, 200)` snippet.
 
@@ -108,22 +140,22 @@ If embedding generation fails (model not loaded, OOM), search degrades gracefull
 
 | Tool | Function | Write? |
 |---|---|---|
-| `brain_search` | Hybrid FTS5 + vector search with RRF | No |
-| `brain_upsert` | Add (omit `id`) or update (include `id`) an entry. Generates/regenerates embeddings. | Yes |
+| `brain_search` | Hybrid FTS5 + vector search with RRF. Filters by project, category, status. | No |
+| `brain_upsert` | Add (omit `id`) or update (include `id`) an entry. Generates/regenerates embeddings. Defaults to speculative (confirmed for api). Set `confirmed=true` to override. | Yes |
 | `brain_delete` | Delete by ID (cascades to embeddings via FK) | Yes |
-| `brain_info` | Entry counts, embedding coverage, project/category breakdown, DB size. Set `include_tags=true` for tag listing with counts. | No |
-| `brain_maintain` | Targeted review of entries needing attention (stale maps, unused, low-confidence). Full sweep every 10th call. Set `deduplicate=true` for cross-project merge (dry-run by default, `apply_dedup=true` to execute). | Yes |
+| `brain_info` | Entry counts, embedding coverage, project/category/status breakdown, DB size. Set `include_tags=true` for tag listing with counts. | No |
+| `brain_maintain` | Targeted review of entries needing attention (stale maps, unused, low-confidence, orphaned speculative). Full sweep every 10th call. Set `deduplicate=true` for cross-project merge (dry-run by default, `apply_dedup=true` to execute). | Yes |
 
 All tool inputs are validated with Zod schemas (`src/types.ts`). Tags are normalized to lowercase on write.
 
 ## Embedding Pipeline
 
 ```
-text → buildEmbeddingText(title, content)    "Title. Content"
-     → getEmbeddingPipeline()                lazy singleton, ONNX WASM
-     → extractor(text, {pooling: "mean", normalize: true})
-     → Float32Array (384 dimensions)
-     → storeEmbedding() → Buffer → embeddings.embedding BLOB
+text -> buildEmbeddingText(title, content)    "Title. Content"
+     -> getEmbeddingPipeline()                lazy singleton, ONNX WASM
+     -> extractor(text, {pooling: "mean", normalize: true})
+     -> Float32Array (384 dimensions)
+     -> storeEmbedding() -> Buffer -> embeddings.embedding BLOB
 ```
 
 Embeddings are generated on `brain_upsert` (new entry) and regenerated on update (when title or content changes). Failures are swallowed — the entry is still persisted without a vector.
@@ -133,42 +165,30 @@ Embeddings are generated on `brain_upsert` (new entry) and regenerated on update
 `install.sh` performs 5 steps:
 1. `npm install` + `npm run build`
 2. `claude mcp add --transport stdio --scope user knowledge-base -- node dist/index.js`
-3. Writes a minimal brain reference to `~/.claude/CLAUDE.md` (3 lines, ~50 tokens)
+3. Extracts the Knowledge Base section from `commands/brain-init.md` and writes it to `~/.claude/CLAUDE.md`
 4. Removes legacy `@knowledge-base.md` import and `~/.claude/knowledge-base.md` if present
 5. Copies slash commands to `~/.claude/commands/`
 
-## Insight Buffer
-
-During a session, insights are buffered to `~/.claude/pending-insights.jsonl` as append-only JSON lines rather than calling `brain_upsert` directly. This ensures discoveries survive session end, context compaction, or `/clear` — even before a commit happens.
-
-Each buffered entry includes: `title`, `content`, `tags`, `category`, `source`, `source_type`, `project`, `tokens_spent` (approximate token cost to reach this insight), and `timestamp`.
-
-### Flush lifecycle
-
-1. **On commit (inline):** Claude reviews the buffer against the committed diff — promotes validated entries via `brain_upsert`, skips unrelated ones, discards invalidated ones.
-2. **`/brain-keep` (session end):** Promotes all remaining buffered entries. Runs `brain_maintain` if 5+ entries were promoted.
-3. **`/brain-abandon` (dead-end session):** Keeps `api` and `pattern` entries (general knowledge survives), discards `map` and `decision` entries (implementation-specific). Always consolidates.
-
-The buffer is a plain file — no MCP tools or schema changes. `brain_upsert` remains the persistence mechanism.
+The Knowledge Base section in `brain-init.md` is the single source of truth — `install.sh` extracts it via awk rather than maintaining a duplicate copy (a previous bug where install.sh had its own outdated version taught us this lesson).
 
 ## Slash Commands
 
 | Command | Purpose |
 |---|---|
 | `/brain-init` | Enable auto-knowledge behavior, migrate detailed CLAUDE.md content into the brain |
-| `/brain-knowledge` | Quick reference for knowledge workflow and buffer format |
+| `/brain-knowledge` | Quick reference for knowledge workflow and speculative/confirmed model |
 | `/brain-sync` | Promote stable brain entries back to CLAUDE.md |
-| `/brain-keep` | Flush insight buffer (promote all), end session. Consolidates if 5+ promoted |
-| `/brain-abandon` | Dead-end session: keep `api`/`pattern` insights, discard `map`/`decision`, consolidate |
+| `/brain-keep` | Promote speculative entries to confirmed, end session. Consolidates if 5+ promoted |
+| `/brain-abandon` | Dead-end session: delete speculative entries, keep confirmed, consolidate |
 | `/goodbye` | Alias for `/brain-keep` |
-| `/exit` | Consolidation only (warns if buffer is non-empty) |
+| `/exit` | Consolidation only (warns if speculative entries exist) |
 
 ## Architecture Assessment
 
 ### Why SQLite+FTS5+Embeddings is the right choice
 
 - **Zero infrastructure** — single file at `~/.claude/knowledge.db`, no server process
-- **Hybrid search** — keyword (FTS5) + semantic (vector) + recency boost, merged via RRF. This is the same pattern used by production systems (Vespa, Elastic)
+- **Hybrid search** — keyword (FTS5) + semantic (vector) + recency boost + status boost, merged via RRF. This is the same pattern used by production systems (Vespa, Elastic)
 - **Low dependency count** — `better-sqlite3` + `@huggingface/transformers` + `zod`
 - **Fast for the target scale** — a personal knowledge base will have hundreds to low-thousands of entries
 - **Portable** — single file, easy backup, works offline
