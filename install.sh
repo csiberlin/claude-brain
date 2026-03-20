@@ -31,6 +31,12 @@ fi
 # Remove old knowledge-base.md file if present
 rm -f "$CLAUDE_DIR/knowledge-base.md"
 
+# Remove existing ## MANDATORY: Consult Knowledge Base First section (from prior installs)
+if [ -f "$CLAUDE_MD" ] && grep -qF "## MANDATORY: Consult Knowledge Base First" "$CLAUDE_MD"; then
+  awk '/^## MANDATORY: Consult Knowledge Base First/{skip=1; next} /^## /{skip=0} !skip' "$CLAUDE_MD" > "$CLAUDE_MD.tmp" && mv "$CLAUDE_MD.tmp" "$CLAUDE_MD"
+  echo "Removed old MANDATORY section from $CLAUDE_MD"
+fi
+
 # Remove existing ## Knowledge Base section (from prior installs) so we can write a fresh one
 if [ -f "$CLAUDE_MD" ] && grep -qF "## Knowledge Base" "$CLAUDE_MD"; then
   # Remove from "## Knowledge Base" to next "##" heading or end of file

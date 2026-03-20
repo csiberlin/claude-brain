@@ -22,9 +22,13 @@ Initialize the knowledge base for this project. Do the following steps:
 ## Step 1: Enable automatic brain usage
 
 1. Read `~/.claude/CLAUDE.md`. If it doesn't exist, create it.
-2. Check if it already contains a `## Knowledge Base` section. If it does, replace it with the minimal reference below. If it doesn't, append it.
+2. Check if it already contains a `## MANDATORY: Consult Knowledge Base First` or `## Knowledge Base` section. If either exists, remove them first. Then append the block below.
 
 ```
+## MANDATORY: Consult Knowledge Base First
+
+Before starting ANY task — including brainstorming, exploring, planning, or implementation — ALWAYS call `brain_search` with relevant terms first. This applies before any skill workflow begins.
+
 ## Knowledge Base
 
 You have access to a persistent knowledge base via MCP tools.

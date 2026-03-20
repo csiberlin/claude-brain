@@ -17,29 +17,85 @@ Write-Host "[3/5] Registering MCP server in Claude Code..."
 claude mcp add --transport stdio --scope user knowledge-base -- node "$ScriptDir\dist\index.js"
 
 Write-Host ""
-Write-Host "[4/5] Installing knowledge base instructions..."
+Write-Host "[4/5] Configuring knowledge base in Claude Code..."
 $ClaudeDir = Join-Path $env:USERPROFILE ".claude"
 if (-not (Test-Path $ClaudeDir)) {
     New-Item -ItemType Directory -Path $ClaudeDir -Force | Out-Null
 }
-$KbFile = Join-Path $ClaudeDir "knowledge-base.md"
 $ClaudeMd = Join-Path $ClaudeDir "CLAUDE.md"
 
-if (-not (Test-Path $KbFile)) {
-    Copy-Item "$ScriptDir\knowledge-base.md" -Destination $KbFile
-    Write-Host "Created $KbFile"
-} else {
-    Write-Host "knowledge-base.md already exists, skipping"
+# Remove old @import if present
+if (Test-Path $ClaudeMd) {
+    $content = Get-Content $ClaudeMd -Raw
+    if ($content -match '@knowledge-base\.md') {
+        $content = ($content -split "`n" | Where-Object { $_ -notmatch '^@knowledge-base\.md' }) -join "`n"
+        Set-Content -Path $ClaudeMd -Value $content -Encoding UTF8 -NoNewline
+        Write-Host "Removed old @knowledge-base.md import from $ClaudeMd"
+    }
 }
 
-if (-not (Test-Path $ClaudeMd)) {
-    "@knowledge-base.md" | Set-Content -Path $ClaudeMd -Encoding UTF8
-    Write-Host "Created $ClaudeMd with @knowledge-base.md reference"
-} elseif (-not (Select-String -Path $ClaudeMd -Pattern "@knowledge-base.md" -SimpleMatch -Quiet)) {
-    Add-Content -Path $ClaudeMd -Value "`n@knowledge-base.md"
-    Write-Host "Added @knowledge-base.md reference to $ClaudeMd"
+# Remove old knowledge-base.md file if present
+$KbFile = Join-Path $ClaudeDir "knowledge-base.md"
+if (Test-Path $KbFile) {
+    Remove-Item $KbFile
+    Write-Host "Removed old $KbFile"
+}
+
+# Remove existing MANDATORY and Knowledge Base sections (from prior installs)
+if (Test-Path $ClaudeMd) {
+    $lines = Get-Content $ClaudeMd
+    $output = @()
+    $skip = $false
+    foreach ($line in $lines) {
+        if ($line -match '^## MANDATORY: Consult Knowledge Base First' -or $line -match '^## Knowledge Base') {
+            $skip = $true
+            continue
+        }
+        if ($skip -and $line -match '^## ') {
+            $skip = $false
+        }
+        if (-not $skip) {
+            $output += $line
+        }
+    }
+    Set-Content -Path $ClaudeMd -Value ($output -join "`n") -Encoding UTF8 -NoNewline
+    Write-Host "Cleaned old Knowledge Base sections from $ClaudeMd"
+}
+
+# Replace old tool names in any remaining content
+if (Test-Path $ClaudeMd) {
+    $content = Get-Content $ClaudeMd -Raw
+    $content = $content -replace 'brain_add','brain_upsert' -replace 'brain_update','brain_upsert' -replace 'brain_list_tags','brain_info' -replace 'brain_consolidate','brain_maintain'
+    Set-Content -Path $ClaudeMd -Value $content -Encoding UTF8 -NoNewline
+}
+
+# Extract Knowledge Base section from brain-init.md (single source of truth)
+$brainInitPath = Join-Path $ScriptDir "commands\brain-init.md"
+$brainInitLines = Get-Content $brainInitPath
+$inside = $false
+$brainRef = @()
+foreach ($line in $brainInitLines) {
+    if ($line -match '^```$') {
+        if ($inside) { break }
+        $inside = $true
+        continue
+    }
+    if ($inside) {
+        $brainRef += $line
+    }
+}
+
+if ($brainRef.Count -eq 0) {
+    Write-Host "WARNING: Could not extract Knowledge Base section from brain-init.md"
 } else {
-    Write-Host "@knowledge-base.md reference already present in CLAUDE.md"
+    $brainText = "`n" + ($brainRef -join "`n")
+    if (-not (Test-Path $ClaudeMd)) {
+        Set-Content -Path $ClaudeMd -Value $brainText -Encoding UTF8 -NoNewline
+        Write-Host "Created $ClaudeMd with brain reference"
+    } else {
+        Add-Content -Path $ClaudeMd -Value $brainText
+        Write-Host "Added brain reference to $ClaudeMd"
+    }
 }
 
 Write-Host ""
